@@ -1,233 +1,223 @@
 /* LoreCore — QC.
-   Funn er en adresse, ikke tekst. Grupperes etter hva de bryter.
-   Verifieren lukker funnet, ikke operatøren. */
+   Funn er en adresse. Grupperes etter hva de bryter.
+   Severity-skalaen er basens: critical|major|minor|style.
+   Status er open|applied|deferred|rejected — det finnes ingen "closed". */
 
-import { esc, onClick, toast, reasonModal, fmtDate } from '../transport.js';
-import { store } from '../store.js';
+import { esc, onClick, toast, reasonModal, fmtNum } from '../transport.js';
+import { store, SEVERITY, FINDING_STATUS } from '../store.js';
 
 let A = null;
-let data = { findings: [], metrics: null, passes: [], health: null };
-let filter = 'all';
-let fixScope = null;
+let D = { findings: [], health: null, chapters: [], briefs: {} };
+let filter = 'open';
 let wired = false;
-
 const sel = () => A.state.sel.qc;
 
 const GROUPS = [
-  { key: 'author',       label: 'Bryter forfatteren' },
-  { key: 'canon',        label: 'Bryter kanon' },
-  { key: 'unassessable', label: 'Kan ikke vurderes' },
+  { key: 'author', label: 'Bryter forfatteren' },
+  { key: 'canon',  label: 'Bryter kanon' },
+  { key: 'other',  label: 'Kan ikke vurderes' },
 ];
 
-const sevClass = s => ({ blocker: 'blk', major: 'maj', minor: 'min' }[s] || 'min');
-const sevLabel = s => ({ blocker: 'blokker', major: 'større', minor: 'mindre' }[s] || s);
+/* Basen har ingen "breaks"-kolonne. Utledes av pass_name til den finnes. */
+function breaksOf(f) {
+  const p = (f.pass_name || '').toLowerCase();
+  if (/canon|constraint|continuity|coherence/.test(p)) return 'canon';
+  if (/voice|dash|rhythm|monopol|lock|tense|triadic|regi|style/.test(p)) return 'author';
+  return 'other';
+}
 
 export async function render(app) {
   A = app;
   A.paintTop();
-
-  const [findings, metrics, passes, health] = await Promise.all([
+  const [findings, health, chapters, briefs] = await Promise.all([
     store.findings(A.state.bookPid, 'all'),
-    store.metrics(A.state.bookPid),
-    store.passes(A.state.bookPid),
     store.health(A.state.bookPid),
+    store.chapters(A.state.bookPid),
+    store.briefs(),
   ]);
-  data = { findings, metrics, passes, health };
-
-  if (!findings.some(f => f.public_id === sel().pid)) {
-    sel().pid = findings.find(f => f.status === 'open')?.public_id || findings[0]?.public_id;
-  }
-  fixScope = null;
-
-  paintRail();
-  paintCenter();
-  paintCtx();
-  wire();
+  D = { findings, health, chapters, briefs };
+  if (!findings.some(f => f.public_id === sel().pid)) sel().pid = findings[0]?.public_id || null;
+  paintRail(); paintCenter(); paintCtx(); wire();
 }
 
-/* ─────────── venstre: arbeidskøen ─────────── */
-
 function visible() {
-  return data.findings.filter(f => {
-    if (filter === 'all')    return f.status === 'open';
-    if (filter === 'closed') return f.status === 'closed';
-    return f.status === 'open' && f.severity === filter;
-  });
+  return D.findings.filter(f =>
+    filter === 'all' ? true
+    : filter === 'closed' ? FINDING_STATUS[f.status]?.closed
+    : filter === 'open' ? f.status === 'open'
+    : f.status === 'open' && f.severity === filter);
 }
 
 function paintRail() {
-  const open = data.findings.filter(f => f.status === 'open');
-  const count = sev => open.filter(f => f.severity === sev).length;
-  const closed = data.findings.filter(f => f.status === 'closed').length;
+  const open = D.findings.filter(f => f.status === 'open');
+  const n = sev => open.filter(f => f.severity === sev).length;
   const list = visible();
 
   A.els.rail.innerHTML = `
     <div class="zt cond"><span>Funn</span><span>${open.length} åpne</span></div>
     <div class="filters">
-      <span class="f ${filter === 'all' ? 'on' : ''}" data-filter="all">alle</span>
-      <span class="f ${filter === 'blocker' ? 'on' : ''}" data-filter="blocker">blokker ${count('blocker')}</span>
-      <span class="f ${filter === 'major' ? 'on' : ''}" data-filter="major">større ${count('major')}</span>
-      <span class="f ${filter === 'minor' ? 'on' : ''}" data-filter="minor">mindre ${count('minor')}</span>
-      <span class="f ${filter === 'closed' ? 'on' : ''}" data-filter="closed">lukket ${closed}</span>
+      ${[['open', 'åpne ' + open.length], ['critical', 'kritisk ' + n('critical')],
+         ['major', 'større ' + n('major')], ['minor', 'mindre ' + n('minor')],
+         ['style', 'stil ' + n('style')],
+         ['closed', 'lukket ' + D.findings.filter(f => FINDING_STATUS[f.status]?.closed).length]]
+        .map(([k, l]) => `<span class="f ${filter === k ? 'on' : ''}" data-filter="${k}">${l}</span>`).join('')}
     </div>
     ${GROUPS.map(g => {
-      const items = list.filter(f => f.breaks === g.key);
+      const items = list.filter(f => breaksOf(f) === g.key);
       if (!items.length) return '';
       return `<div class="grp cond">${g.label}</div>` + items.map(f => `
         <div class="fi ${f.public_id === sel().pid ? 'on' : ''}" data-finding="${f.public_id}">
-          <div class="fi-t"><span>${esc(f.title)}</span>
-            <span class="sev ${f.status === 'closed' ? 'cl' : sevClass(f.severity)}">${f.rule_key || '—'}</span></div>
-          <div class="fi-m">${esc(f.scope_label)}</div>
+          <div class="fi-t"><span>${esc((f.issue_description || '').slice(0, 60))}</span>
+            <span class="sev ${SEVERITY[f.severity]?.cls || 'min'}">${esc(f.pass_name || '')}</span></div>
+          <div class="fi-m">kap ${f.chapter_n ?? '—'}${f.location_ref ? ' · ' + esc(f.location_ref) : ''}</div>
         </div>`).join('');
     }).join('')}
-    ${!list.length ? '<div class="scope-note" style="padding:14px">Ingen funn i dette filteret.</div>' : ''}`;
+    ${!list.length ? `<div class="scope-note" style="padding:14px;line-height:1.6">
+      Ingen funn i dette filteret.<br><br>
+      Tabellen <span class="mono">lore_audit_findings</span> er tom for denne boka.
+      Funn oppstår når et audit-pass kjøres.</div>` : ''}`;
 }
 
-/* ─────────── senter: målestokk · treff · målinger · pass ─────────── */
-
 function paintCenter() {
-  const f = data.findings.find(x => x.public_id === sel().pid);
-  if (!f) {
-    A.els.main.innerHTML = `<div class="mh"><div class="mt">Ingen funn valgt</div></div>
-      <div class="mb"><div class="empty">Velg et funn i køen til venstre.</div></div>`;
-    return;
-  }
-  const g = GROUPS.find(x => x.key === f.breaks);
-  const m = f.measured_against;
+  const f = D.findings.find(x => x.public_id === sel().pid);
+  if (!f) return paintEmpty();
 
   A.els.main.innerHTML = `
     <div class="mh">
-      <div class="crumb">Funn / ${g.label.toLowerCase()}</div>
-      <div class="mt">${esc(f.title)}
-        <span class="sev ${f.status === 'closed' ? 'cl' : sevClass(f.severity)}">${
-          f.status === 'closed' ? 'lukket' : sevLabel(f.severity)}</span></div>
-      <div class="msub">${f.summary}</div>
+      <div class="crumb">Funn / ${GROUPS.find(g => g.key === breaksOf(f)).label.toLowerCase()}</div>
+      <div class="mt">${esc((f.issue_description || '').slice(0, 90))}
+        <span class="sev ${SEVERITY[f.severity]?.cls || 'min'}">${SEVERITY[f.severity]?.label || f.severity}</span></div>
+      <div class="msub">Pass <span class="mono">${esc(f.pass_name || '')}</span> ·
+        ${f.audit_agent_name ? 'agent ' + esc(f.audit_agent_name) + ' · ' : ''}status ${FINDING_STATUS[f.status]?.label || f.status}</div>
     </div>
     <div class="mb">
-      ${m ? `
-      <div class="sec"><div class="sech cond">Målestokken</div>
-        <div class="rulebox">
-          <div class="rh"><span><span class="rk">${m.rule_key}</span> ${esc(m.author_name)}</span>
-            <span class="rsrc">${esc(m.inherited_note)}</span></div>
-          <div class="rb"><span class="ct ${m.condition}">${
-            ({ always: 'alltid', when: 'når', never: 'aldri' })[m.condition]}</span>${m.rule_text}</div>
-        </div>
-      </div>` : ''}
-
-      ${f.hits?.length ? `
-      <div class="sec"><div class="sech cond"><span>Treff</span>
-        <span class="rsrc">klikk for å åpne i Library</span></div>
-        ${f.hits.map(h => `
-          <div class="hit">
-            <div class="hith" data-goto="${h.target_pid}">
-              <span class="hitloc">kap ${h.address.chapter} · scene ${h.address.scene} · setning ${h.address.sentence}</span>
-              <span class="rsrc">åpne →</span></div>
-            <div class="hitb">${esc(h.text_before)}<span class="mark">${esc(h.text_mark)}</span>${esc(h.text_after)}</div>
-            <div class="why">${esc(h.why)}</div>
-          </div>`).join('')}
-      </div>` : ''}
-
-      <div class="sec"><div class="sech cond"><span>Mekaniske målinger</span>
-        <span class="rsrc">kjører kontinuerlig · sist ${fmtDate(data.metrics.last_run_at)}</span></div>
-        <div class="metrics">${data.metrics.items.map(i => `
-          <div class="met"><div class="ml">${esc(i.label)}</div>
-            <div class="mv ${i.state}">${esc(i.value)}</div>
-            <div class="mfoot">${esc(i.foot)}</div></div>`).join('')}
-        </div>
-      </div>
-
-      <div class="sec"><div class="sech cond"><span>Vurderingspass</span>
-        <span class="rsrc">3-way deliberation · kjøres på forespørsel</span></div>
-        ${data.passes.map(p => `
-          <div class="passrow"><span class="pn">${esc(p.label)}</span>
-            <span class="ps ${p.state}">${esc(p.detail)}</span>
-            <button class="btn sm" data-pass="${p.key}" ${p.state === 'running' ? 'disabled' : ''}>Kjør</button></div>`).join('')}
-      </div>
+      <div class="sec"><div class="sech cond">Beskrivelse</div>
+        <div class="rulebox"><div class="rb">${esc(f.issue_description || '')}</div></div></div>
+      ${f.suggested_fix ? `
+      <div class="sec"><div class="sech cond"><span>Foreslått fiks</span>
+        <span class="rsrc">fra audit-agenten</span></div>
+        <div class="rulebox"><div class="rb">${esc(f.suggested_fix)}</div></div></div>` : ''}
+      <div class="sec"><div class="sech cond">Adresse</div>
+        <div class="hit"><div class="hith" ${f.chapter_n ? `data-goto="${f.chapter_n}"` : ''}>
+          <span class="hitloc">kap ${f.chapter_n ?? '—'}${f.scene_public_id ? ' · ' + esc(f.scene_public_id) : ''}</span>
+          <span class="rsrc">${f.chapter_n ? 'åpne →' : ''}</span></div></div></div>
     </div>`;
 }
 
-/* ─────────── høyre: fiks · lukking · helse ─────────── */
+/* Tomt er ikke tomt: vis hva som ER målbart, og hva som mangler for å måle det. */
+function paintEmpty() {
+  const briefs = Object.values(D.briefs);
+  const constraints = {};
+  briefs.forEach(b => (b.constraints || []).forEach(k => constraints[k] = (constraints[k] || 0) + 1));
+
+  A.els.main.innerHTML = `
+    <div class="mh">
+      <div class="crumb">QC / ${A.state.versionLabel}</div>
+      <div class="mt">Ingen funn registrert</div>
+      <div class="msub">Ingenting er auditert på denne versjonen ennå.
+        Under står det som er målbart i dag.</div>
+    </div>
+    <div class="mb">
+      <div class="sec"><div class="sech cond"><span>Absolutte begrensninger i briefsene</span>
+        <span class="rsrc">maskinlesbare never-regler · ${briefs.length} kapitler</span></div>
+        ${Object.keys(constraints).length ? `
+        <div class="rulebox">${Object.entries(constraints).sort((a, b) => b[1] - a[1]).map(([k, n]) => `
+          <div class="rb" style="border-bottom:1px solid var(--soft);display:flex;justify-content:space-between">
+            <span><span class="ct never">aldri</span><span class="mono">${esc(k)}</span></span>
+            <span class="rsrc">${n} kapitler</span></div>`).join('')}
+        </div>
+        <div class="hint" style="font-size:11px">Disse er allerede strukturerte. Et mekanisk pass kan måle mot dem uten ny modellering.</div>`
+        : '<div class="empty">Ingen briefs med begrensninger.</div>'}
+      </div>
+
+      <div class="sec"><div class="sech cond"><span>Substrat-tilstand</span>
+        <span class="rsrc">avledet, ikke auditert</span></div>
+        <div class="metrics">
+          <div class="met"><div class="ml">Kapitler</div><div class="mv">${D.health.chapters}</div><div class="mfoot">i versjonen</div></div>
+          <div class="met"><div class="ml">Uten brief</div><div class="mv ${D.health.without_brief ? 'bad' : 'ok'}">${D.health.without_brief}</div><div class="mfoot">kan ikke vurderes</div></div>
+          <div class="met"><div class="ml">Uten prosa</div><div class="mv ${D.health.without_prose ? 'bad' : 'ok'}">${D.health.without_prose}</div><div class="mfoot">ikke skrevet</div></div>
+          <div class="met"><div class="ml">Lavt verdikt</div><div class="mv ${D.health.flagged ? 'bad' : 'ok'}">${D.health.flagged}</div><div class="mfoot">under 80</div></div>
+          <div class="met"><div class="ml">Foreldreløse briefs</div><div class="mv ${D.health.briefs_orphaned ? 'bad' : 'ok'}">${D.health.briefs_orphaned}</div><div class="mfoot">book_public_id NULL</div></div>
+          <div class="met"><div class="ml">Åpne funn</div><div class="mv ${D.health.open_findings ? 'bad' : 'ok'}">${D.health.open_findings}</div><div class="mfoot">lore_audit_findings</div></div>
+        </div>
+      </div>
+
+      <div class="sec"><div class="sech cond"><span>Pass som kan kjøres</span>
+        <span class="rsrc">mekaniske single-model · vurdering 3-way</span></div>
+        ${[['em_dash_density', 'Em-dash-tetthet', 'mekanisk'],
+           ['word_monopoly', 'Ordmonopol', 'mekanisk'],
+           ['name_form', 'Navneform-konsistens', 'mekanisk'],
+           ['tense_drift', 'Tempus-drift', 'mekanisk'],
+           ['constraint_check', 'Absolutte begrensninger', 'mekanisk'],
+           ['canon_violation', 'Kanonbrudd', '3-way'],
+           ['voice_contamination', 'Stemme-kontaminering', '3-way'],
+           ['regi_leakage', 'Regi-lekkasje', '3-way']].map(([k, l, kind]) => `
+          <div class="passrow"><span class="pn">${l}</span>
+            <span class="ps">${kind}</span>
+            <button class="btn sm" data-pass="${k}">Kjør</button></div>`).join('')}
+      </div>
+    </div>`;
+}
 
 function paintCtx() {
-  const f = data.findings.find(x => x.public_id === sel().pid);
-  const h = data.health;
-  const scopes = f?.fix_scopes || [];
-  if (scopes.length && !fixScope) fixScope = scopes[0].key;
-
+  const f = D.findings.find(x => x.public_id === sel().pid);
+  const h = D.health;
   A.els.ctx.innerHTML = `
-    ${scopes.length ? `
+    ${f ? `
     <div class="blk"><div class="bl cond">Fiks dette</div>
-      <div class="scopepick">${scopes.map(s => `
-        <div class="sp ${s.key === fixScope ? 'on' : ''}" data-fix="${s.key}">
-          <span>${esc(s.label)}</span><span class="c">~${s.est_minutes} min</span></div>`).join('')}
-      </div>
-      <button class="btn go act" data-rewrite>Skriv om valgt scope</button>
-      <button class="btn act" data-open-author>Juster ${f.rule_key || 'regelen'} i Author</button>
-      <div class="hint">Omskriving kjører mot gjeldende forfatter. Kapittel 13 har egen stemme-overstyring, men ${f.rule_key || 'regelen'} er arvet uendret.</div>
-    </div>` : ''}
-
-    <div class="blk"><div class="bl cond">Lukking</div>
-      <div class="closed">Funnet lukkes av verifieren, ikke av deg. Etter omskriving kjøres passet på nytt — forsvinner treffene, lukkes funnet automatisk med tidsstempel.</div>
-      <div class="hint">Vil du overstyre, må det oppgis grunn. Overstyrte funn vises i «lukket» med eget merke.</div>
-      ${f && f.status === 'open'
-        ? '<button class="btn act" style="margin-top:8px" data-override>Overstyr med grunn</button>'
-        : f ? `<div class="hint" style="color:var(--gr)">Lukket av ${f.closed_by === 'operator' ? 'operatør' : 'verifier'}${
-            f.override_reason ? ' — ' + esc(f.override_reason) : ''}</div>` : ''}
+      <button class="btn go act" data-rewrite>Skriv om kapittel ${f.chapter_n ?? '—'}</button>
+      <div class="hint">Går mot <span class="mono">regenerate-chapter/${f.chapter_n ?? 'N'}</span>,
+        som allerede finnes i pipeline-API-et.</div>
     </div>
-
+    <div class="blk"><div class="bl cond">Lukking</div>
+      <div class="closed">Verifieren setter <span class="mono">applied</span> etter omskriving.
+        Du kan sette <span class="mono">deferred</span> eller <span class="mono">rejected</span> — begge krever grunn.</div>
+      ${f.status === 'open' ? `
+        <button class="btn act" style="margin-top:8px" data-status="deferred">Utsett med grunn</button>
+        <button class="btn act" data-status="rejected">Avvis med grunn</button>`
+        : `<div class="hint" style="color:var(--gr)">${FINDING_STATUS[f.status]?.label}${
+             f.override_reason ? ' — ' + esc(f.override_reason) : ''}</div>`}
+    </div>` : ''}
     <div class="blk"><div class="bl cond">Bokas helse</div>
-      <div class="kr"><span class="kk">Blokkere</span><span class="kv ${h.blockers ? 'bad' : 'ok'}">${h.blockers}</span></div>
-      <div class="kr"><span class="kk">Kanon-drift</span><span class="kv ${h.canon_drift ? 'bad' : 'ok'}">${h.canon_drift}</span></div>
-      <div class="kr"><span class="kk">Kapitler uten brief</span><span class="kv ${h.chapters_without_brief ? 'bad' : 'ok'}">${h.chapters_without_brief}</span></div>
-      <div class="kr"><span class="kk">Kan utgis</span><span class="kv ${h.publishable ? 'ok' : 'bad'}">${h.publishable ? 'ja' : 'nei'}</span></div>
-      <div class="hint">Utgivelse låses opp når blokkere er 0 og alle kapitler kan vurderes.</div>
+      <div class="kr"><span class="kk">Kritiske funn</span><span class="kv ${h.critical ? 'bad' : 'ok'}">${h.critical}</span></div>
+      <div class="kr"><span class="kk">Uten brief</span><span class="kv ${h.without_brief ? 'bad' : 'ok'}">${h.without_brief}</span></div>
+      <div class="kr"><span class="kk">Uten prosa</span><span class="kv ${h.without_prose ? 'bad' : 'ok'}">${h.without_prose}</span></div>
+      <div class="kr"><span class="kk">Kan utgis</span><span class="kv bad">nei</span></div>
+      <div class="hint">Utgivelse låses opp når kritiske funn er 0 og alle kapitler kan vurderes.</div>
     </div>`;
 }
-
-/* ─────────── hendelser ─────────── */
 
 function wire() {
   if (wired) return;
   wired = true;
-
-  onClick(A.els.rail, '[data-filter]', el => {
-    filter = el.dataset.filter; paintRail();
-  });
+  onClick(A.els.rail, '[data-filter]', el => { filter = el.dataset.filter; paintRail(); });
   onClick(A.els.rail, '[data-finding]', el => {
-    sel().pid = el.dataset.finding; fixScope = null;
-    paintRail(); paintCenter(); paintCtx();
+    sel().pid = el.dataset.finding; paintRail(); paintCenter(); paintCtx();
   });
-
-  onClick(A.els.main, '[data-goto]', el =>
-    A.go('library', { kind: 'chapter', pid: el.dataset.goto }));
-
+  onClick(A.els.main, '[data-goto]', el => {
+    const n = +el.dataset.goto;
+    const c = D.chapters.find(x => x.order_index === n);
+    if (c) A.go('library', { kind: 'chapter', pid: c.public_id });
+  });
   onClick(A.els.main, '[data-pass]', async el => {
-    await store.runPass(el.dataset.pass, A.state.bookPid);
-    data.passes = await store.passes(A.state.bookPid);
-    paintCenter();
-    toast('Vurderingspass startet — 3 familier + synthesizer', 'ok');
-  });
-
-  onClick(A.els.ctx, '[data-fix]', el => { fixScope = el.dataset.fix; paintCtx(); });
-
-  onClick(A.els.ctx, '[data-rewrite]', async () => {
-    const f = data.findings.find(x => x.public_id === sel().pid);
-    const r = await store.startRun({
-      module_key: 'rewrite', scope_kind: fixScope,
-      scope_pid: f.hits[0]?.target_pid || A.state.bookPid });
-    toast(`Omskriving startet · ${r.public_id}. Funnet lukkes av verifieren etterpå.`, 'ok');
+    await store.startRun({ stage: 'audit:' + el.dataset.pass, book_public_id: A.state.bookPid,
+      scope_kind: 'book', scope_pid: A.state.bookPid });
+    toast('Pass startet mot ' + A.state.versionLabel, 'ok');
     A.refreshRuns();
   });
-
-  onClick(A.els.ctx, '[data-override]', async () => {
-    const reason = await reasonModal('Overstyr funn',
-      'Verifieren har ikke lukket dette. Overstyring merkes med din grunn og blir stående på raden.');
-    if (!reason) return;
-    await store.overrideFinding(sel().pid, reason);
-    data.findings = await store.findings(A.state.bookPid, 'all');
-    paintRail(); paintCenter(); paintCtx();
-    toast('Funn lukket med grunn — merket som operatør-overstyring', 'ok');
+  onClick(A.els.ctx, '[data-rewrite]', async () => {
+    const f = D.findings.find(x => x.public_id === sel().pid);
+    await store.regenerateChapter(f.pipeline_run_id || 'unknown', f.chapter_n);
+    toast('Omskriving startet. Funnet lukkes av verifieren.', 'ok');
   });
-
-  onClick(A.els.ctx, '[data-open-author]', () => A.go('author'));
+  onClick(A.els.ctx, '[data-status]', async el => {
+    const st = el.dataset.status;
+    const reason = await reasonModal(st === 'deferred' ? 'Utsett funn' : 'Avvis funn',
+      'Grunnen lagres på raden og overlever rerun.');
+    if (!reason) return;
+    await store.setFindingStatus(sel().pid, st, reason);
+    D.findings = await store.findings(A.state.bookPid, 'all');
+    paintRail(); paintCenter(); paintCtx();
+    toast('Funn satt til ' + FINDING_STATUS[st].label, 'ok');
+  });
 }
