@@ -1,0 +1,66 @@
+/* LoreCore — shell.
+   Eneste sted som setter bredder og breakpoints. Komponenter setter aldri egen bredde. */
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--tx);
+  font-family:var(--f-body);
+  font-size:var(--t-lg);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+
+.shell{display:grid;grid-template-rows:auto auto 1fr;height:100vh}
+
+/* ---- top bar ---- */
+.top{
+  background:var(--panel);border-bottom:1px solid var(--border);
+  padding:var(--s2) var(--s5);display:flex;align-items:center;gap:14px;
+}
+.brand{font-size:var(--t-lg);font-weight:600;letter-spacing:.07em;flex-shrink:0}
+.brand span{color:var(--ac)}
+.modes{display:flex;background:var(--raised);border-radius:var(--r2);padding:2px;margin-left:var(--s2)}
+.mode{
+  padding:5px 14px;font-size:var(--t-md);color:var(--tx3);
+  border-radius:var(--r);cursor:pointer;border:none;background:none;font-family:inherit;
+}
+.mode:hover{color:var(--tx2)}
+.mode.on{background:var(--raised2);color:var(--tx)}
+.mode:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.spacer{flex:1}
+.uni{font-size:var(--t-md);color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uni b{color:var(--tx2);font-weight:400;font-family:var(--f-mono)}
+
+/* ---- three-lane body ---- */
+.body{display:grid;grid-template-columns:var(--rail-w) 1fr var(--ctx-w);overflow:hidden;min-height:0}
+.rail{background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;padding:var(--s4) 0 var(--s6)}
+.main{overflow-y:auto;background:var(--bg);min-width:0}
+.ctx{background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;padding:var(--s4)}
+
+/* ---- responsive ---- */
+@media (max-width:1500px){ :root{--rail-w:220px;--ctx-w:260px} }
+@media (max-width:1180px){
+  :root{--ctx-w:0px}
+  .body{grid-template-columns:var(--rail-w) 1fr}
+  .ctx{display:none}
+  .ctx.open{
+    display:block;position:fixed;right:0;top:var(--top-h);bottom:0;width:290px;z-index:40;
+    box-shadow:-14px 0 34px rgba(0,0,0,.45);
+  }
+}
+@media (max-width:800px){
+  :root{--rail-w:0px}
+  .body{grid-template-columns:1fr}
+  .rail{display:none}
+  .rail.open{
+    display:block;position:fixed;left:0;top:var(--top-h);bottom:0;width:250px;z-index:40;
+    box-shadow:14px 0 34px rgba(0,0,0,.45);
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
