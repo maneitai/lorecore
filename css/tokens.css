@@ -1,0 +1,44 @@
+/* LoreCore — design tokens.
+   Eneste reskin-punkt. Ingen farge eller typografi defineres andre steder. */
+
+:root{
+  /* surfaces */
+  --bg:#14181D;
+  --panel:#1B2027;
+  --raised:#232932;
+  --raised2:#2A313C;
+  --border:#323A46;
+  --soft:#262D37;
+
+  /* text */
+  --tx:#E8EAED;
+  --tx2:#8B92A0;
+  --tx3:#5B6270;
+
+  /* accent — bytt disse to linjene for å skifte hele produktets aksent.
+     cyan = mockup (godkjent). oransje = deployed arv (#d97706 / #43371C). */
+  --ac:#4CC9E8;
+  --acd:#1B3540;
+
+  /* semantic */
+  --am:#F5A623; --amd:#43371C;   /* varsel / betinget */
+  --gr:#3ECF8E; --grd:#1B3A2F;   /* ok / alltid */
+  --rd:#E5484D; --rdd:#3E1F22;   /* brudd / aldri */
+  --vi:#A78BFA; --vid:#2E2A45;   /* overstyring */
+
+  /* type */
+  --f-body:'IBM Plex Sans',system-ui,sans-serif;
+  --f-cond:'IBM Plex Sans Condensed',var(--f-body);
+  --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+
+  --t-xs:9px; --t-sm:10px; --t-md:11px; --t-base:12px; --t-lg:13px; --t-xl:17px;
+
+  /* space */
+  --s1:4px; --s2:6px; --s3:9px; --s4:13px; --s5:18px; --s6:24px;
+  --r:3px; --r2:4px;
+
+  /* layout */
+  --rail-w:250px;
+  --ctx-w:290px;
+  --top-h:37px;
+}

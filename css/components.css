@@ -1,0 +1,198 @@
+/* LoreCore — delte komponenter.
+   Alt her brukes av to eller flere flater. Flate-spesifikt ligger i modes.css. */
+
+.mono{font-family:var(--f-mono)}
+.cond{font-family:var(--f-cond);text-transform:uppercase;letter-spacing:.08em}
+
+/* ---- knapper ---- */
+.btn{
+  background:var(--raised);border:1px solid var(--border);color:var(--tx2);
+  font-size:var(--t-md);padding:5px 11px;border-radius:var(--r);cursor:pointer;
+  font-family:inherit;line-height:1.4;
+}
+.btn:hover{border-color:var(--ac);color:var(--tx)}
+.btn:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:disabled:hover{border-color:var(--border);color:var(--tx2)}
+.btn.go{background:var(--acd);border-color:var(--ac);color:var(--ac)}
+.btn.sm{padding:3px 8px;font-size:var(--t-sm)}
+.btn.act{width:100%;margin-bottom:5px}
+
+/* ---- rail: skoper og lister ---- */
+.zt{
+  font-size:var(--t-sm);color:var(--tx3);padding:0 14px var(--s3);
+  letter-spacing:.1em;display:flex;justify-content:space-between;
+}
+.scope{margin-bottom:var(--s2)}
+.scope-h{
+  padding:7px 14px;font-size:var(--t-sm);color:var(--tx3);letter-spacing:.1em;
+  display:flex;justify-content:space-between;align-items:center;cursor:pointer;
+}
+.scope-h:hover{color:var(--tx2)}
+.scope-h .n{font-family:var(--f-mono);font-size:var(--t-sm);color:var(--tx3)}
+.scope-note{padding:0 14px var(--s2);font-size:var(--t-sm);color:var(--tx3);opacity:.75}
+
+.it{
+  padding:5px 14px 5px 22px;font-size:var(--t-base);color:var(--tx2);cursor:pointer;
+  border-left:2px solid transparent;display:flex;align-items:center;
+  justify-content:space-between;gap:var(--s2);
+}
+.it:hover{background:var(--raised);color:var(--tx)}
+.it.sel{background:var(--raised2);color:var(--tx);border-left-color:var(--ac)}
+.it.muted{color:var(--tx3)}
+.it .tag{font-size:var(--t-xs);font-family:var(--f-mono);padding:1px 5px;border-radius:2px;flex-shrink:0}
+.tag.warn{background:var(--rdd);color:var(--rd)}
+.tag.ovr{background:var(--vid);color:var(--vi)}
+.sub{padding-left:34px;font-size:var(--t-md)}
+.grp{padding:var(--s2) 14px var(--s1) 22px;font-size:var(--t-sm);color:var(--tx3);letter-spacing:.06em}
+.count{font-size:var(--t-md);color:var(--tx3);font-family:var(--f-mono)}
+
+.verpick{margin:var(--s1) 14px var(--s2) 22px;display:flex;gap:3px}
+.v{
+  padding:3px 8px;font-size:var(--t-sm);font-family:var(--f-mono);background:var(--raised);
+  border:1px solid var(--soft);border-radius:var(--r);color:var(--tx3);cursor:pointer;
+}
+.v:hover{color:var(--tx2)}
+.v.on{background:var(--acd);border-color:var(--ac);color:var(--ac)}
+
+/* ---- senter: header og seksjoner ---- */
+.mh{padding:var(--s5) 22px var(--s4);border-bottom:1px solid var(--soft)}
+.crumb{font-size:var(--t-md);color:var(--tx3);margin-bottom:5px}
+.mt{font-size:var(--t-xl);font-weight:500;display:flex;align-items:center;gap:var(--s3)}
+.msub{font-size:var(--t-base);color:var(--tx2);margin-top:var(--s1);line-height:1.5}
+.mb{padding:var(--s5) 22px 26px}
+.sec{margin-bottom:20px}
+.sech{
+  font-size:var(--t-sm);color:var(--tx3);letter-spacing:.1em;margin-bottom:var(--s3);
+  display:flex;justify-content:space-between;align-items:center;
+}
+
+.badge{font-size:var(--t-sm);font-family:var(--f-mono);padding:2px 8px;border-radius:var(--r)}
+.badge.ovr{background:var(--vid);color:var(--vi);border:1px solid rgba(167,139,250,.3)}
+.badge.warn{background:var(--rdd);color:var(--rd);border:1px solid rgba(229,72,77,.3)}
+
+.src,.rsrc{font-size:var(--t-sm);color:var(--tx3);font-family:var(--f-mono)}
+
+/* fravær er handlingsdyktig — knappen bor i tomrommet */
+.empty{
+  padding:20px var(--s4);border:1px dashed var(--border);border-radius:var(--r2);
+  text-align:center;color:var(--tx3);font-size:var(--t-base);line-height:1.6;
+}
+.empty .btn{margin-top:var(--s3)}
+
+/* ---- rader ---- */
+.rowlist{border:1px solid var(--border);border-radius:var(--r2);overflow:hidden}
+.row{
+  display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s4);
+  background:var(--panel);border-bottom:1px solid var(--soft);font-size:var(--t-base);cursor:pointer;
+}
+.row:last-child{border-bottom:none}
+.row:hover{background:var(--raised)}
+.row .num{font-family:var(--f-mono);font-size:var(--t-sm);color:var(--tx3);width:20px;flex-shrink:0}
+.row .nm{flex:1;color:var(--tx2)}
+.row:hover .nm{color:var(--tx)}
+
+/* ---- stemme / regler ---- */
+.voicebox{border:1px solid var(--border);border-radius:var(--r2);background:var(--panel);overflow:hidden}
+.vhead{
+  padding:var(--s3) var(--s4);background:var(--raised);border-bottom:1px solid var(--soft);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.vname{font-size:var(--t-base);color:var(--tx)}
+.vrule{
+  padding:var(--s3) var(--s4);border-bottom:1px solid var(--soft);font-size:var(--t-base);
+  color:var(--tx2);display:flex;gap:var(--s3);align-items:flex-start;line-height:1.5;
+}
+.vrule:last-child{border-bottom:none}
+.vrule .rulekey{font-family:var(--f-mono);font-size:var(--t-xs);color:var(--tx3);width:26px;flex-shrink:0;margin-top:2px}
+.cond-tag{
+  font-size:var(--t-xs);font-family:var(--f-mono);padding:1px 6px;border-radius:2px;
+  background:var(--raised);color:var(--tx3);white-space:nowrap;flex-shrink:0;margin-top:1px;
+}
+.cond-tag.always{background:var(--grd);color:var(--gr)}
+.cond-tag.never{background:var(--rdd);color:var(--rd)}
+.cond-tag.when{background:var(--amd);color:var(--am)}
+
+.diffline{
+  font-size:var(--t-base);color:var(--tx2);padding:var(--s2) 0;
+  border-bottom:1px solid var(--soft);display:flex;justify-content:space-between;gap:var(--s3);
+}
+.diffline:last-child{border:none}
+.dn{color:var(--vi)}
+
+/* ---- brief mot prosa ---- */
+.split{
+  display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);
+  border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;
+}
+@media (max-width:900px){ .split{grid-template-columns:1fr} }
+.pane{background:var(--panel);padding:var(--s4)}
+.ptitle{font-size:var(--t-sm);color:var(--tx3);letter-spacing:.1em;margin-bottom:var(--s3)}
+.beat{
+  background:var(--raised);border-left:2px solid var(--ac);padding:7px var(--s3);
+  margin-bottom:5px;font-size:var(--t-base);color:var(--tx2);border-radius:0 var(--r) var(--r) 0;line-height:1.5;
+}
+.beat b{color:var(--tx);font-weight:500}
+.prose{font-size:var(--t-lg);line-height:1.75;color:var(--tx2);white-space:pre-wrap}
+
+/* ---- høyre kontekst ---- */
+.blk{margin-bottom:var(--s5)}
+.bl{
+  font-size:var(--t-sm);color:var(--tx3);letter-spacing:.1em;margin-bottom:var(--s3);
+  display:flex;justify-content:space-between;
+}
+.kr{
+  display:flex;justify-content:space-between;gap:var(--s3);padding:var(--s2) 0;
+  font-size:var(--t-md);border-bottom:1px solid var(--soft);
+}
+.kr:last-child{border:none}
+.kk{color:var(--tx3)}
+.kv{color:var(--tx2);font-family:var(--f-mono);text-align:right}
+.kv.ok{color:var(--gr)}
+.kv.bad{color:var(--rd)}
+.kv.ovr{color:var(--vi)}
+.kv.no{color:var(--tx3)}
+.hint{font-size:var(--t-sm);color:var(--tx3);line-height:1.5;margin-top:7px}
+
+/* ---- funn-kort ---- */
+.find{
+  border:1px solid var(--soft);border-radius:var(--r2);padding:var(--s3) var(--s3);
+  margin-bottom:var(--s2);cursor:pointer;background:var(--raised);
+}
+.find:hover{border-color:var(--ac)}
+.find .ft{font-size:var(--t-md);color:var(--tx);margin-bottom:3px;display:flex;justify-content:space-between;gap:var(--s2)}
+.find .fd{font-size:var(--t-md);color:var(--tx3);line-height:1.45}
+
+.sev{font-size:var(--t-xs);font-family:var(--f-mono);padding:1px 5px;border-radius:2px;flex-shrink:0}
+.sev.blk{background:var(--rdd);color:var(--rd)}
+.sev.maj{background:var(--amd);color:var(--am)}
+.sev.min{background:var(--raised2);color:var(--tx3)}
+.sev.cl{background:var(--grd);color:var(--gr)}
+
+/* ---- toast ---- */
+.toasts{position:fixed;bottom:var(--s5);right:var(--s5);z-index:90;display:flex;flex-direction:column;gap:var(--s2)}
+.toast{
+  background:var(--raised2);border:1px solid var(--border);border-left:2px solid var(--ac);
+  border-radius:var(--r2);padding:var(--s3) var(--s4);font-size:var(--t-base);color:var(--tx2);
+  max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
+.toast.bad{border-left-color:var(--rd)}
+.toast.ok{border-left-color:var(--gr)}
+
+/* ---- modal ---- */
+.scrim{position:fixed;inset:0;background:rgba(10,13,17,.7);z-index:80;display:flex;align-items:center;justify-content:center}
+.modal{
+  background:var(--panel);border:1px solid var(--border);border-radius:5px;
+  width:min(440px,92vw);box-shadow:0 20px 50px rgba(0,0,0,.5);
+}
+.modal-h{padding:var(--s4) var(--s5);border-bottom:1px solid var(--soft);font-size:var(--t-lg);color:var(--tx)}
+.modal-b{padding:var(--s5);font-size:var(--t-base);color:var(--tx2);line-height:1.6}
+.modal-b textarea{
+  width:100%;margin-top:var(--s3);background:var(--raised);border:1px solid var(--border);
+  border-radius:var(--r2);padding:var(--s3);color:var(--tx2);font-family:inherit;font-size:var(--t-base);
+  resize:vertical;min-height:70px;
+}
+.modal-f{padding:var(--s4) var(--s5);border-top:1px solid var(--soft);display:flex;gap:var(--s2);justify-content:flex-end}
+
+/* ---- kilde-status ---- */
+.stale{color:var(--am)}
