@@ -196,3 +196,53 @@
 
 /* ---- kilde-status ---- */
 .stale{color:var(--am)}
+
+/* ---- utvidbare rader ----
+   Avkortet tekst uten klikk-mål er en blindvei. Hver .row som har mer
+   innhold får en .rowbody under seg og markerer seg som klikkbar. */
+.row.has-more{position:relative;padding-right:26px}
+.row.has-more::after{
+  content:'';position:absolute;right:12px;top:50%;width:5px;height:5px;
+  border-right:1px solid var(--tx3);border-bottom:1px solid var(--tx3);
+  transform:translateY(-70%) rotate(45deg);transition:transform .15s ease;
+}
+.row.has-more.open::after{transform:translateY(-30%) rotate(-135deg)}
+.row.has-more.open{background:var(--raised)}
+.rowbody{
+  padding:var(--s4) var(--s5) var(--s5);background:var(--raised);
+  border-bottom:1px solid var(--soft);font-size:var(--t-base);
+  line-height:1.7;color:var(--tx2);white-space:pre-wrap;
+}
+.rowbody:last-child{border-bottom:none}
+.rowbody .lbl{
+  display:block;font-family:var(--f-cond);text-transform:uppercase;letter-spacing:.08em;
+  font-size:var(--t-sm);color:var(--tx3);margin-bottom:var(--s2);
+}
+.rowbody + .row{border-top:1px solid var(--border)}
+
+/* .src skal aldri sprenge raden — kutt med ellipsis, ikke midt i et ord */
+.row .src{
+  max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;
+}
+
+/* ---- versjonsvelger som nedtrekk ----
+   7 versjoner får ikke plass som brikker i en 250px rail. */
+.verselect{margin:var(--s2) 14px var(--s2) 22px;position:relative}
+.verselect select{
+  width:100%;appearance:none;background:var(--raised);border:1px solid var(--border);
+  color:var(--tx);font-family:var(--f-mono);font-size:var(--t-md);
+  padding:6px 24px 6px var(--s3);border-radius:var(--r);cursor:pointer;
+}
+.verselect select:hover{border-color:var(--ac)}
+.verselect select:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.verselect::after{
+  content:'';position:absolute;right:10px;top:12px;width:5px;height:5px;pointer-events:none;
+  border-right:1px solid var(--tx3);border-bottom:1px solid var(--tx3);transform:rotate(45deg);
+}
+.verselect .vmeta{font-size:var(--t-sm);color:var(--tx3);font-family:var(--f-mono);margin-top:var(--s1)}
+
+/* prosa-utdrag markeres som utdrag, ikke som hel tekst */
+.excerpt-end{
+  display:block;margin-top:var(--s4);padding-top:var(--s3);border-top:1px solid var(--soft);
+  font-size:var(--t-sm);color:var(--tx3);font-family:var(--f-mono);white-space:normal;
+}
