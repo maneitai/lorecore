@@ -91,11 +91,14 @@ function paintRail() {
       <div class="scope-h cond"><span>Bøker</span><span class="n">1</span></div>
       <div class="scope-note">Per bok · versjon som bryter</div>
       <div class="it sel" style="border-left-color:var(--ac)"><span>${esc(g.title)}</span></div>
-      <div class="verpick">
-        ${g.versions.map(v => `
-          <span class="v ${v.public_id === A.state.bookPid ? 'on' : ''}"
-                data-version="${v.public_id}" data-label="${v.version_label}"
-                title="${v.chapter_count} kap · ${fmtNum(v.word_count)} ord">${v.version_label}</span>`).join('')}
+      <div class="verselect">
+        <select id="verpick" aria-label="Versjon">
+          ${g.versions.map(v => `
+            <option value="${v.public_id}" data-label="${v.version_label}"
+              ${v.public_id === A.state.bookPid ? 'selected' : ''}>${v.version_label} — ${
+              v.chapter_count} kap${v.word_count ? ' · ' + fmtNum(v.word_count) + ' ord' : ''}</option>`).join('')}
+        </select>
+        <div class="vmeta">${g.versions.length} versjoner · versjon bryter, kanon står</div>
       </div>
       <div class="grp cond">Kapitler · ${D.chapters.length}</div>
       ${shown.map(c => `
@@ -113,6 +116,16 @@ function paintRail() {
 }
 
 /* ─────────── senter ─────────── */
+
+/* Rad + skjult full tekst. Alt som er avkortet skal kunne apnes. */
+function expandRow({ name, meta, body, label, attrs = '' }) {
+  const more = body && body.trim().length > 0;
+  return `<div class="row ${more ? 'has-more' : ''}" ${attrs}>
+      <span class="nm">${esc(name)}</span>
+      ${meta ? `<span class="src">${esc(meta)}</span>` : ''}
+    </div>
+    ${more ? `<div class="rowbody" hidden>${label ? `<span class="lbl">${esc(label)}</span>` : ''}${esc(body)}</div>` : ''}`;
+}
 
 const head = (crumb, title, badges, sub) => `<div class="mh">
   <div class="crumb">${crumb}</div>
@@ -196,7 +209,8 @@ async function viewChapter(pid) {
                 </div>`).join('')}
           </div>
           <div class="pane"><div class="ptitle cond">Prosa</div>
-            ${c.has_prose ? `<div class="prose">${esc(c.prose_excerpt)}…</div>`
+            ${c.has_prose ? `<div class="prose">${esc(c.prose_excerpt)}<span class="excerpt-end">Utdrag — ${
+                 fmtNum(c.word_count)} ord i basen. Hele teksten krever GET /chapters/{pid}.</span></div>`
               : `<div class="empty">Ingen prosa lagret.
                  <button class="btn go" data-run="chapters">Kjør kapittel-modulen</button></div>`}
           </div>
@@ -251,7 +265,10 @@ function viewCanon(which) {
       <div class="mb">${k.characters.map(c => `
         <div class="sec"><div class="sech cond"><span>${esc(c.name)}</span>
           <span class="src">${esc(c.role || '')}${c.is_pre_planned ? ' · forhåndsplanlagt' : ''}</span></div>
-          <div class="voicebox"><div class="vrule"><span>${esc((c.traits || '').slice(0, 480))}…</span></div></div>
+          ${c.summary ? `<div class="voicebox" style="margin-bottom:8px"><div class="vrule"><span>${esc(c.summary)}</span></div></div>` : ''}
+          <div class="rowlist">${expandRow({
+            name: 'Stemme i prosa', meta: 'klikk for hele', body: c.traits || '', label: 'Traits',
+          })}${c.goals ? expandRow({ name: 'Mål', meta: '', body: c.goals, label: 'Goals' }) : ''}</div>
         </div>`).join('')}</div>`;
     A.els.ctx.innerHTML = `
       <div class="blk"><div class="bl cond">R7 trenger et flagg</div>
@@ -277,10 +294,10 @@ function viewCanon(which) {
     `${k.worlds.length} i fire dybdenivåer`) + `
     <div class="mb">${Object.entries(tiers).map(([t, ws]) => `
       <div class="sec"><div class="sech cond"><span>${t}</span><span class="src">${ws.length}</span></div>
-        <div class="rowlist">${ws.slice(0, 12).map(w => `
-          <div class="row"><span class="nm">${esc(w.name)}</span>
-            <span class="src">${esc((w.summary || '').slice(0, 70))}…</span></div>`).join('')}
-          ${ws.length > 12 ? `<div class="row"><span class="nm" style="color:var(--tx3)">+ ${ws.length - 12} til</span></div>` : ''}
+        <div class="rowlist">${ws.map(w => expandRow({
+            name: w.name, meta: w.canon_state || w.status || '',
+            body: w.summary || '', label: 'Sammendrag',
+          })).join('')}
         </div></div>`).join('')}</div>`;
   A.els.ctx.innerHTML = `
     <div class="blk"><div class="bl cond">Scope</div>
@@ -325,7 +342,11 @@ function viewActs() {
     <div class="mb">${D.canon.acts.map(a => `
       <div class="sec"><div class="sech cond"><span>Akt ${a.order_index} — ${esc(a.title || '')}</span>
         <span class="src">${esc(a.status || '')}</span></div>
-        <div class="voicebox"><div class="vrule"><span>${esc((a.summary || a.act_summary || '').slice(0, 700))}…</span></div></div>
+        <div class="rowlist">
+          ${a.summary ? expandRow({ name: 'Sammendrag', meta: 'klikk for hele', body: a.summary, label: 'Summary' }) : ''}
+          ${a.act_summary && a.act_summary !== a.summary
+            ? expandRow({ name: 'Akt-sammendrag', meta: '', body: a.act_summary, label: 'Act summary' }) : ''}
+        </div>
       </div>`).join('')}</div>`;
   A.els.ctx.innerHTML = `<div class="blk"><div class="bl cond">Scope</div>
     <div class="hint">Akter ligger på biblioteket, ikke per versjon.</div></div>`;
@@ -346,13 +367,26 @@ function wire() {
 
   onClick(A.els.rail, '[data-expand-chapters]', () => { expanded = true; paintRail(); });
 
-  onClick(A.els.rail, '[data-version]', async el => {
-    A.setBook(el.dataset.version, el.dataset.label);
+  A.els.rail.addEventListener('change', async e => {
+    const sl = e.target.closest('#verpick');
+    if (!sl) return;
+    const opt = sl.selectedOptions[0];
+    A.setBook(sl.value, opt.dataset.label);
     D.chapters = await store.chapters(A.state.bookPid);
     expanded = false;
     if (sel().kind === 'chapter') A.state.sel.library = { kind: 'author', pid: 'none' };
     paintRail(); await paintCenter();
   });
+
+  /* Utvidbare rader: klikk apner full tekst under raden. */
+  const toggle = (root) => onClick(root, '.row.has-more', el => {
+    const body = el.nextElementSibling;
+    if (!body || !body.classList.contains('rowbody')) return;
+    const open = !body.hasAttribute('hidden');
+    if (open) { body.setAttribute('hidden', ''); el.classList.remove('open'); }
+    else { body.removeAttribute('hidden'); el.classList.add('open'); }
+  });
+  toggle(A.els.main);
 
   const run = async el => {
     const c = sel().kind === 'chapter' ? sel().pid : null;
