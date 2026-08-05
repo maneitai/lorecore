@@ -26,19 +26,18 @@ const LS = {
 export const app = {
   mode: null,
   state: {
-    libraryPid: LS.get('libraryId', 'LIB-GALDURDAL'),
+    libraryPid: LS.get('libraryId', 'LIB-GALDURDAL-B1-V2'),
     universeId: 'UNI-GALDURDAL',
-    bookGroupId: 'BGR-GALDURDAL-1',
-    bookPid: LS.get('bookId', 'LBK-GALDV31D'),
-    versionLabel: 'V31D',
-    authorPid: 'AUT-GALDURDAL',
+    bookPid: LS.get('bookId', ''),
+    versionLabel: '',
+    authorPid: null,
     overview: null,
     /* per-flate valg, holdes slik at retur til en flate ikke mister sted */
     sel: {
-      library: { kind: 'author', pid: 'AUT-GALDURDAL' },
-      qc:      { pid: 'LAF-0101', filter: 'open' },
-      kilder:  { pid: 'LSR-CORNWELL' },
-      author:  { sessionPid: 'CHS-0801' },
+      library: { kind: 'author', pid: 'none' },
+      qc:      { pid: null, filter: 'open' },
+      kilder:  { pid: null },
+      author:  { sessionPid: null },
     },
   },
 
@@ -80,7 +79,7 @@ export const app = {
     if (this.mode === 'kilder') {
       this.els.uni.innerHTML = 'Eget referansebibliotek';
     } else if (this.mode === 'qc') {
-      this.els.uni.innerHTML = `Bok <b>Galdurdal Book 1 · ${s.versionLabel}</b> · Forfatter <b>Galdurdal-stemmen</b>`;
+      this.els.uni.innerHTML = `Bok <b>Galdurdal Book 1 · ${s.versionLabel}</b> · Forfatter <b>ingen</b>`;
     } else if (this.mode === 'author') {
       this.els.uni.innerHTML = `Univers <b>${s.universeId}</b> · Bok <b>${s.versionLabel}</b>`;
     } else {
