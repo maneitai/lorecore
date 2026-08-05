@@ -1,10 +1,12 @@
 /* LoreCore — store.
    ══════════════════════════════════════════════════════════════════
    BYTTEPUNKTET. Ingen komponent kaller fetch. Alle kaller store.
-   Når backend står ferdig: sett SOURCE='live'. Ingen annen fil røres.
 
-   Hver metode har endepunktet den skal treffe i kommentaren over seg.
-   Den lista ER backend-arbeidsordren.
+   Fixture-dataen er GENERERT FRA LIVE BASE (lorecore_dump_fixtures_v1.py).
+   Formene under er derfor ekte, ikke antatt. Hver metode har ruta den
+   skal treffe i kommentaren — den lista er backend-arbeidsordren.
+
+   Ruter som ALLEREDE finnes er merket [finnes]. Resten må bygges.
    ══════════════════════════════════════════════════════════════════ */
 
 import { api } from './transport.js';
@@ -13,78 +15,87 @@ import * as F from './fixtures.js';
 export const SOURCE = new URLSearchParams(location.search).get('live') ? 'live' : 'fixtures';
 
 const clone = v => structuredClone(v);
-const wait  = (v, ms = 90) => new Promise(r => setTimeout(() => r(clone(v)), ms));
+const wait  = (v, ms = 60) => new Promise(r => setTimeout(() => r(clone(v)), ms));
 
-/* Muterbar kopi i fixture-modus, så avhuking og lukking oppfører seg
-   som ekte skriv innenfor økta. */
 const local = {
   findings: clone(F.findings),
   sources: clone(F.sources),
-  overrides: clone(F.voiceOverrides),
-  candidates: clone(F.extractCandidates),
-  passes: clone(F.passes),
+  authors: clone(F.authors),
+  overrides: [],
+};
+
+/* Severity-skalaen i basen er critical|major|minor|style.
+   Status er open|applied|deferred|rejected. Det finnes ingen "closed". */
+export const SEVERITY = {
+  critical: { label: 'kritisk', cls: 'blk', rank: 0 },
+  major:    { label: 'større',  cls: 'maj', rank: 1 },
+  minor:    { label: 'mindre',  cls: 'min', rank: 2 },
+  style:    { label: 'stil',    cls: 'min', rank: 3 },
+};
+export const FINDING_STATUS = {
+  open:     { label: 'åpen',     closed: false },
+  applied:  { label: 'utbedret', closed: true  },
+  deferred: { label: 'utsatt',   closed: true  },
+  rejected: { label: 'avvist',   closed: true  },
 };
 
 export const store = {
 
-  /* GET /api/lorecore/overview?library_public_id= */
-  async overview(libraryPid) {
-    if (SOURCE === 'live') return api(`/api/lorecore/overview?library_public_id=${libraryPid || ''}`);
-    return wait(F.overview);
+  /* [finnes] GET /api/lorecore/overview?library_public_id=&book_public_id=
+     Må endres: returner tellinger + bokgruppe, ikke alle rader. */
+  async overview() {
+    if (SOURCE === 'live') return api(`/api/lorecore/overview?library_public_id=${F.library.public_id}`);
+    return wait({
+      library: F.library,
+      book_group: F.bookGroup,
+      canon: {
+        worlds: F.canon.worlds.length,
+        characters: F.canon.characters.length,
+        locations: F.canon.locations.length,
+        acts: F.canon.acts.length,
+      },
+      counts: {
+        sources: F.sources.length,
+        authors: F.authors.length,
+        briefs: Object.keys(F.briefsByChapterN).length,
+        open_findings: F.findings.filter(f => f.status === 'open').length,
+      },
+      meta: F.meta,
+    });
   },
 
-  /* GET /api/lorecore/chapters?book_public_id= */
+  /* [finnes] GET /api/lorecore/chapters?book_public_id=
+     Må utvides med flags[] + pov + has_brief. */
   async chapters(bookPid) {
     if (SOURCE === 'live') return api(`/api/lorecore/chapters?book_public_id=${bookPid}`);
     return wait(F.chaptersByBook[bookPid] || []);
   },
 
-  /* GET /api/lorecore/chapters/{pid} — brief parset til scenes[] server-side */
+  /* MANGLER: GET /api/lorecore/chapters/{pid}
+     I dag finnes kun PUT. All lesing går via overview. */
   async chapter(pid) {
     if (SOURCE === 'live') return api(`/api/lorecore/chapters/${pid}`);
-    const hit = F.chapterDetail[pid];
-    if (hit) return wait(hit);
-    const row = (F.chaptersByBook['LBK-GALDV31D'] || []).find(c => c.public_id === pid);
-    if (!row) throw new Error('Fant ikke kapittelet');
-    return wait({
-      ...row, scenes: [], voice: { author_public_id: 'AUT-GALDURDAL', inherited: true, override: null },
-      written_by: ['Kimi', 'gpt-oss', 'GLM'], synthesized_by: 'GLM', canon_check: 'passed',
-      pipeline_run_id: 'PLR-V31D-11' + row.order_index,
-    });
+    const c = F.chapterDetail[pid];
+    if (!c) throw new Error('Fant ikke kapittelet');
+    return wait({ ...c, brief: c.brief_n ? F.briefsByChapterN[c.brief_n] : null });
   },
 
-  /* GET /api/lorecore/authors  ·  GET /api/lorecore/authors/{pid} */
-  async authors() {
-    if (SOURCE === 'live') return api('/api/lorecore/authors');
-    return wait(F.authors);
-  },
-  async author(pid) {
-    if (SOURCE === 'live') return api(`/api/lorecore/authors/${pid}`);
-    const a = F.authors.find(x => x.public_id === pid);
-    if (!a) throw new Error('Fant ikke forfatteren');
-    return wait(a);
+  /* MANGLER: GET /api/lorecore/briefs?library_public_id=
+     32 rader, alle med book_public_id NULL — foreldrelose. */
+  async briefs() {
+    if (SOURCE === 'live') return api(`/api/lorecore/briefs?library_public_id=${F.library.public_id}`);
+    return wait(F.briefsByChapterN);
   },
 
-  /* GET /api/lorecore/voice-overrides?author_public_id= */
-  async overrides(authorPid) {
-    if (SOURCE === 'live') return api(`/api/lorecore/voice-overrides?author_public_id=${authorPid}`);
-    return wait(local.overrides.filter(o => o.author_public_id === authorPid));
-  },
-
-  /* DELETE /api/lorecore/voice-overrides/{pid} */
-  async removeOverride(pid) {
-    if (SOURCE === 'live') return api(`/api/lorecore/voice-overrides/${pid}`, { method: 'DELETE' });
-    local.overrides = local.overrides.filter(o => o.public_id !== pid);
-    return wait({ ok: true });
-  },
-
-  /* GET /api/lorecore/canon?universe_id= */
-  async canon(universeId) {
-    if (SOURCE === 'live') return api(`/api/lorecore/canon?universe_id=${universeId}`);
+  /* MANGLER: GET /api/lorecore/canon?library_public_id= */
+  async canon() {
+    if (SOURCE === 'live') return api(`/api/lorecore/canon?library_public_id=${F.library.public_id}`);
     return wait(F.canon);
   },
 
-  /* GET /api/lorecore/sources  ·  GET /api/lorecore/sources/{pid} */
+  /* MANGLER: GET /api/lorecore/sources
+     Leser lorecore_author_profiles + lorecore_corpus_references.
+     Aspekt-nøklene ER nøklene i style_card_json. */
   async sources() {
     if (SOURCE === 'live') return api('/api/lorecore/sources');
     return wait(local.sources);
@@ -96,105 +107,126 @@ export const store = {
     return wait(s);
   },
 
-  /* POST /api/lorecore/sources/{pid}/mine  {aspect_kind} */
+  /* MANGLER: POST /api/lorecore/sources/{pid}/mine {aspect_kind} */
   async mineAspect(pid, aspectKind) {
     if (SOURCE === 'live') return api(`/api/lorecore/sources/${pid}/mine`, { method: 'POST', body: { aspect_kind: aspectKind } });
     const s = local.sources.find(x => x.public_id === pid);
-    const label = F.ASPECT_KINDS.find(a => a.key === aspectKind)?.label || aspectKind;
-    s.runs.unshift({ public_id: 'PLR-MINE-' + Date.now().toString().slice(-4),
-      label: `Miner ${label.toLowerCase()} · ${s.works.length} bøker`, status: 'running',
-      progress_label: 'bok 1 av ' + s.works.length, started_at: new Date().toISOString() });
+    s.runs.unshift({ public_id: 'LARUN-' + Date.now().toString(36).toUpperCase(),
+      label: 'Miner ' + aspectKind, status: 'running',
+      progress_label: 'verk 1 av ' + s.works.length, started_at: new Date().toISOString() });
     return wait({ ok: true });
   },
 
-  /* GET /api/lorecore/findings?book_public_id=&status= */
+  /* MANGLER HELT: lore_authors + lore_author_rules + lore_voice_overrides.
+     style_card_json er kilde-nivå (funn per forfatter), ikke komponert stemme. */
+  async authors() {
+    if (SOURCE === 'live') return api('/api/lorecore/authors');
+    return wait(local.authors);
+  },
+  async author(pid) {
+    if (SOURCE === 'live') return api(`/api/lorecore/authors/${pid}`);
+    const a = local.authors.find(x => x.public_id === pid);
+    if (!a) throw new Error('Fant ikke forfatteren');
+    return wait(a);
+  },
+  async overrides(authorPid) {
+    if (SOURCE === 'live') return api(`/api/lorecore/voice-overrides?author_public_id=${authorPid}`);
+    return wait(local.overrides.filter(o => o.author_public_id === authorPid));
+  },
+
+  /* MANGLER: GET /api/lorecore/findings?book_public_id=&status=
+     Tabellen lore_audit_findings finnes med ekte skjema. */
   async findings(bookPid, status = 'open') {
     if (SOURCE === 'live') return api(`/api/lorecore/findings?book_public_id=${bookPid}&status=${status}`);
-    return wait(local.findings.filter(f => f.book_public_id === bookPid && (status === 'all' || f.status === status)));
+    return wait(local.findings.filter(f =>
+      (!bookPid || f.book_public_id === bookPid) && (status === 'all' || f.status === status)));
   },
 
-  /* POST /api/lorecore/findings/{pid}/override  {reason}
-     Verifieren lukker normalt. Operatør-overstyring krever grunn og merkes. */
-  async overrideFinding(pid, reason) {
-    if (SOURCE === 'live') return api(`/api/lorecore/findings/${pid}/override`, { method: 'POST', body: { reason } });
+  /* MANGLER: POST /api/lorecore/findings/{pid}/status {status, reason} */
+  async setFindingStatus(pid, status, reason) {
+    if (SOURCE === 'live') return api(`/api/lorecore/findings/${pid}/status`, { method: 'POST', body: { status, reason } });
     const f = local.findings.find(x => x.public_id === pid);
-    if (f) { f.status = 'closed'; f.closed_by = 'operator'; f.override_reason = reason; f.closed_at = new Date().toISOString(); }
+    if (f) { f.status = status; f.override_reason = reason; f.applied_at = new Date().toISOString(); }
     return wait({ ok: true });
   },
 
-  /* GET /api/lorecore/qc/metrics?book_public_id= */
-  async metrics(bookPid) {
-    if (SOURCE === 'live') return api(`/api/lorecore/qc/metrics?book_public_id=${bookPid}`);
-    return wait(F.metrics);
-  },
-
-  /* GET /api/lorecore/qc/passes?book_public_id= */
-  async passes(bookPid) {
-    if (SOURCE === 'live') return api(`/api/lorecore/qc/passes?book_public_id=${bookPid}`);
-    return wait(local.passes);
-  },
-
-  /* POST /api/lorecore/qc/passes/run  {pass_key, book_public_id, scope} */
-  async runPass(passKey, bookPid) {
-    if (SOURCE === 'live') return api('/api/lorecore/qc/passes/run', { method: 'POST', body: { pass_key: passKey, book_public_id: bookPid } });
-    const p = local.passes.find(x => x.key === passKey);
-    if (p) { p.state = 'running'; p.detail = 'kjører · 3-way'; }
-    return wait({ ok: true });
-  },
-
-  /* GET /api/lorecore/books/{pid}/health */
+  /* Bokas helse — avledet, ikke eget endepunkt. */
   async health(bookPid) {
-    if (SOURCE === 'live') return api(`/api/lorecore/books/${bookPid}/health`);
-    return wait(F.bookHealth);
+    const [chs, fnd] = await Promise.all([this.chapters(bookPid), this.findings(bookPid, 'open')]);
+    const briefs = await this.briefs();
+    return {
+      book_public_id: bookPid,
+      chapters: chs.length,
+      without_brief: chs.filter(c => !c.has_brief).length,
+      without_prose: chs.filter(c => c.flags.some(f => f.kind === 'no_prose')).length,
+      flagged: chs.filter(c => c.flags.some(f => f.kind === 'low_verdict')).length,
+      critical: fnd.filter(f => f.severity === 'critical').length,
+      open_findings: fnd.length,
+      briefs_orphaned: Object.values(briefs).filter(b => b.orphaned).length,
+      publishable: false,
+    };
   },
 
-  /* GET /api/chat-sessions?surface=lorecore  ·  GET /api/chat-sessions/{id} */
+  /* [finnes] GET /api/chat-sessions?surface=lorecore */
   async sessions() {
     if (SOURCE === 'live') return api('/api/chat-sessions?surface=lorecore&limit=30');
-    return wait(F.sessions);
+    return wait([]);
   },
   async sessionMessages(pid) {
     if (SOURCE === 'live') return (await api(`/api/chat-sessions/${pid}`)).messages || [];
-    return wait(F.sessionMessages[pid] || []);
+    return wait([]);
   },
 
-  /* POST /api/lorecore/extract  {session_public_id, dry_run:true}
-     KRITISK: dagens endepunkt skriver direkte. Gate-modellen krever
-     kandidater med type + sitat + mål, uten skriv. */
+  /* [finnes] POST /api/lorecore/extract — men skriver direkte.
+     Må ta dry_run:true og returnere kandidater uten skriv. */
   async extractDryRun(sessionPid) {
     if (SOURCE === 'live') return api('/api/lorecore/extract', { method: 'POST', body: { session_public_id: sessionPid, dry_run: true } });
-    return wait(local.candidates[sessionPid] || []);
+    return wait([]);
   },
 
-  /* POST /api/lorecore/persist  {candidates:[...]}
-     Generisk persist-agent: schema fra information_schema, FK-verifisering,
-     transaction, verify-after-write. */
+  /* MANGLER: POST /api/lorecore/persist — generisk persist-agent.
+     persist_agent.py finnes allerede i scripts/, mangler rute. */
   async persistCandidates(sessionPid, ids) {
     if (SOURCE === 'live') return api('/api/lorecore/persist', { method: 'POST', body: { session_public_id: sessionPid, candidate_ids: ids } });
-    const list = local.candidates[sessionPid] || [];
-    local.candidates[sessionPid] = list.filter(c => !ids.includes(c.id));
-    return wait({ written: ids.length, verified: ids.length, rejected: [] }, 700);
+    return wait({ written: ids.length, verified: ids.length, rejected: [] }, 500);
   },
 
-  /* GET /api/lorecore/modules?book_public_id= */
-  async moduleTree(bookPid) {
-    if (SOURCE === 'live') return api(`/api/lorecore/modules?book_public_id=${bookPid}`);
-    return wait(F.moduleTree);
+  /* [finnes] POST /api/lorecore/books/{pid}/run-stage
+     Skop-treet treffer denne med ulik stage — ikke et nytt /runs-endepunkt. */
+  async startRun({ stage, book_public_id, scope_kind, scope_pid }) {
+    if (SOURCE === 'live') return api(`/api/lorecore/books/${book_public_id}/run-stage`,
+      { method: 'POST', body: { stage, scope_kind, scope_pid } });
+    return wait({ public_id: 'PR-' + Date.now().toString(36).toUpperCase(), status: 'queued' }, 300);
   },
 
-  /* POST /api/lorecore/runs  {module_key, scope_kind, scope_pid}
-     Én motor, flere innganger: samme kall fra Author, Library og QC. */
-  async startRun({ module_key, scope_kind, scope_pid }) {
-    if (SOURCE === 'live') return api('/api/lorecore/runs', { method: 'POST', body: { module_key, scope_kind, scope_pid } });
-    return wait({ public_id: 'PLR-' + Date.now().toString().slice(-6), status: 'queued' }, 400);
-  },
-
-  /* GET /api/lorecore/runs?status=active */
+  /* [finnes] GET /api/pipelines/runs/active */
   async activeRuns() {
-    if (SOURCE === 'live') return api('/api/lorecore/runs?status=active');
-    return wait(F.activeRuns);
+    if (SOURCE === 'live') return api('/api/pipelines/runs/active');
+    return wait([]);
   },
 
-  deliberationModes: () => clone(F.deliberationModes),
-  aspectKinds: () => clone(F.ASPECT_KINDS),
+  /* [finnes] POST /api/pipelines/runs/{job_id}/regenerate-chapter/{chapter_n} */
+  async regenerateChapter(jobId, chapterN) {
+    if (SOURCE === 'live') return api(`/api/pipelines/runs/${jobId}/regenerate-chapter/${chapterN}`, { method: 'POST' });
+    return wait({ ok: true });
+  },
+
+  aspects: () => clone(F.ASPECTS),
+
+  /* Modulkjeden. Stage-navnene må bekreftes mot run-stage sin enum. */
+  moduleTree: () => ([
+    { key: 'research',  label: 'Research',             depth: 1 },
+    { key: 'preplan',   label: 'Verden og karakterer', depth: 1 },
+    { key: 'structure', label: 'Plot og tidslinje',    depth: 1 },
+    { key: 'briefs',    label: 'Kapittel-briefs',      depth: 1 },
+    { key: 'chapters',  label: 'Kapittel-modulen',     depth: 1 },
+    { key: 'audit',     label: 'Språk-audit',          depth: 1 },
+    { key: 'publish',   label: 'Utgivelse',            depth: 1 },
+  ]),
+
+  deliberationModes: () => ([
+    { key: 'single',    label: 'Én modell', hint: 'ingen kryssjekk — kun mekaniske oppgaver' },
+    { key: 'committee', label: 'Komité',    hint: '3 familier som leser hverandre + synthesizer' },
+    { key: 'deep',      label: 'Dyp',       hint: '5 familier — for irreversible valg' },
+  ]),
 };
