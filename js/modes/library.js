@@ -1,103 +1,103 @@
 /* LoreCore — Library.
-   Fire skop med hvert sitt nivå. Versjon er bryter, ikke gren.
-   Badge kun ved avvik. Senteret er aldri tomt. */
+   Fire skop. Versjon er bryter, ikke gren — de 7 bøkene ER versjonene
+   av én gruppe. Badge kun ved avvik. Senteret er aldri tomt. */
 
-import { esc, onClick, toast, confirmModal, fmtNum } from '../transport.js';
+import { esc, onClick, toast, fmtNum, fmtDate } from '../transport.js';
 import { store } from '../store.js';
 
 let A = null;
-let data = { overview: null, chapters: [], authors: [], sources: [], canon: null };
-let wired = false;
+let D = { overview: null, chapters: [], canon: null, sources: [], authors: [] };
 let expanded = false;
+let wired = false;
 
 const sel = () => A.state.sel.library;
 
 export async function render(app) {
   A = app;
+  const ov = await store.overview();
+  A.state.overview = ov;
+  A.state.libraryPid = ov.library.public_id;
+  A.state.universeId = ov.library.universe_id;
+  if (!ov.book_group.versions.some(v => v.public_id === A.state.bookPid)) {
+    const d = ov.book_group.versions.find(v => v.public_id === ov.book_group.default_book);
+    A.state.bookPid = d.public_id;
+    A.state.versionLabel = d.version_label;
+  }
   A.paintTop();
-  A.els.topAction ||= null;
 
-  const [overview, chapters, authors, sources, canon] = await Promise.all([
-    A.state.overview ? Promise.resolve(A.state.overview) : store.overview(A.state.libraryPid),
-    store.chapters(A.state.bookPid),
-    store.authors(),
-    store.sources(),
-    store.canon(A.state.universeId),
+  const [chapters, canon, sources, authors] = await Promise.all([
+    store.chapters(A.state.bookPid), store.canon(), store.sources(), store.authors(),
   ]);
-  data = { overview, chapters, authors, sources, canon };
-  A.state.overview = overview;
+  D = { overview: ov, chapters, canon, sources, authors };
 
   paintRail();
   await paintCenter();
   wire();
 }
 
-/* ─────────── venstre: fire skop ─────────── */
+/* ─────────── venstre ─────────── */
 
-/* Kapitler med avvik må alltid være synlige. En badge bak en sammenslått
-   liste er ingen badge. Vises: de tre første, alle flaggede, det valgte
-   og naboene. Resten stille bak «+ N til». */
+/* Kapitler med avvik ma vaere synlige uten a utvide. */
 function railChapters() {
   const s = sel();
   const keep = new Set();
-  data.chapters.slice(0, 3).forEach(c => keep.add(c.public_id));
-  data.chapters.forEach((c, i) => {
+  D.chapters.slice(0, 3).forEach(c => keep.add(c.public_id));
+  D.chapters.forEach((c, i) => {
     if (!c.flags.length && c.public_id !== s.pid) return;
     keep.add(c.public_id);
-    if (data.chapters[i - 1]) keep.add(data.chapters[i - 1].public_id);
-    if (data.chapters[i + 1]) keep.add(data.chapters[i + 1].public_id);
+    if (D.chapters[i - 1]) keep.add(D.chapters[i - 1].public_id);
+    if (D.chapters[i + 1]) keep.add(D.chapters[i + 1].public_id);
   });
-  return data.chapters.filter(c => keep.has(c.public_id));
+  return D.chapters.filter(c => keep.has(c.public_id));
 }
 
 function paintRail() {
-  const s = sel();
-  const grp = data.overview.book_groups[0];
-  const shown = expanded ? data.chapters : railChapters();
-  const rest = data.chapters.length - shown.length;
+  const s = sel(), ov = D.overview, g = ov.book_group;
+  const shown = expanded ? D.chapters : railChapters();
+  const rest = D.chapters.length - shown.length;
 
   A.els.rail.innerHTML = `
     <div class="scope">
-      <div class="scope-h cond"><span>Kilder</span><span class="n">${data.overview.counts.sources}</span></div>
+      <div class="scope-h cond"><span>Kilder</span><span class="n">${ov.counts.sources}</span></div>
       <div class="scope-note">Minte stemmer · globalt</div>
-      ${data.sources.map(x => `
+      ${D.sources.map(x => `
         <div class="it ${s.kind === 'source' && s.pid === x.public_id ? 'sel' : ''}"
              data-pick="source" data-pid="${x.public_id}">
           <span>${esc(x.name)}</span><span class="count">${x.works.length}</span></div>`).join('')}
     </div>
 
     <div class="scope">
-      <div class="scope-h cond"><span>Forfattere</span><span class="n">${data.authors.length}</span></div>
+      <div class="scope-h cond"><span>Forfattere</span><span class="n">${D.authors.length}</span></div>
       <div class="scope-note">Komponerte stemmer · globalt</div>
-      ${data.authors.map(x => `
+      ${D.authors.length ? D.authors.map(x => `
         <div class="it ${s.kind === 'author' && s.pid === x.public_id ? 'sel' : ''}"
-             data-pick="author" data-pid="${x.public_id}"><span>${esc(x.name)}</span></div>`).join('')}
-      <div class="it muted" data-new-author><span>+ ny forfatter</span></div>
+             data-pick="author" data-pid="${x.public_id}"><span>${esc(x.name)}</span></div>`).join('')
+        : `<div class="it ${s.kind === 'author' ? 'sel' : ''}" data-pick="author" data-pid="none">
+             <span style="color:var(--tx3)">Ingen komponert ennå</span></div>`}
     </div>
 
     <div class="scope">
       <div class="scope-h cond"><span>Kanon</span><span class="n">${
-        data.overview.canon.worlds + data.overview.canon.characters + data.overview.canon.locations}</span></div>
+        ov.canon.worlds + ov.canon.characters + ov.canon.locations}</span></div>
       <div class="scope-note">Per univers · deles av alle versjoner</div>
-      <div class="it ${s.kind === 'canon' ? 'sel' : ''}" data-pick="canon" data-pid="worlds">
-        <span>Verdener</span><span class="count">${data.overview.canon.worlds}</span></div>
-      <div class="it" data-pick="canon" data-pid="characters">
-        <span>Karakterer</span><span class="count">${data.overview.canon.characters}</span></div>
-      <div class="it" data-pick="canon" data-pid="locations">
-        <span>Lokasjoner</span><span class="count">${data.overview.canon.locations}</span></div>
+      ${[['worlds', 'Verdener', ov.canon.worlds],
+         ['characters', 'Karakterer', ov.canon.characters],
+         ['locations', 'Lokasjoner', ov.canon.locations]].map(([k, l, n]) => `
+        <div class="it ${s.kind === 'canon' && s.pid === k ? 'sel' : ''}" data-pick="canon" data-pid="${k}">
+          <span>${l}</span><span class="count">${n}</span></div>`).join('')}
     </div>
 
     <div class="scope">
-      <div class="scope-h cond"><span>Bøker</span><span class="n">${data.overview.book_groups.length}</span></div>
+      <div class="scope-h cond"><span>Bøker</span><span class="n">1</span></div>
       <div class="scope-note">Per bok · versjon som bryter</div>
-      <div class="it sel" style="border-left-color:var(--ac)"><span>${esc(grp.title)}</span></div>
+      <div class="it sel" style="border-left-color:var(--ac)"><span>${esc(g.title)}</span></div>
       <div class="verpick">
-        ${grp.versions.map(v => `
+        ${g.versions.map(v => `
           <span class="v ${v.public_id === A.state.bookPid ? 'on' : ''}"
                 data-version="${v.public_id}" data-label="${v.version_label}"
-                title="${v.status} · ${fmtNum(v.word_count)} ord">${v.version_label}</span>`).join('')}
+                title="${v.chapter_count} kap · ${fmtNum(v.word_count)} ord">${v.version_label}</span>`).join('')}
       </div>
-      <div class="grp cond">Kapitler · ${data.chapters.length}</div>
+      <div class="grp cond">Kapitler · ${D.chapters.length}</div>
       ${shown.map(c => `
         <div class="it sub ${s.kind === 'chapter' && s.pid === c.public_id ? 'sel' : ''}"
              data-pick="chapter" data-pid="${c.public_id}">
@@ -105,21 +105,19 @@ function paintRail() {
           ${c.flags.map(f => `<span class="tag ${f.tone}">${f.label}</span>`).join('')}
         </div>`).join('')}
       ${rest > 0 ? `<div class="it sub muted" data-expand-chapters><span>+ ${rest} til</span></div>` : ''}
+      ${!D.chapters.length ? '<div class="scope-note" style="padding:8px 22px">Ingen kapitler i denne versjonen.</div>' : ''}
       <div class="grp cond">Plot</div>
-      <div class="it sub" data-pick="acts" data-pid="acts"><span>Akter</span><span class="count">4</span></div>
+      <div class="it sub ${s.kind === 'acts' ? 'sel' : ''}" data-pick="acts" data-pid="acts">
+        <span>Akter</span><span class="count">${D.canon.acts.length}</span></div>
     </div>`;
 }
 
-
-
 /* ─────────── senter ─────────── */
 
-function head(crumb, title, badges, sub) {
-  return `<div class="mh">
-    <div class="crumb">${crumb}</div>
-    <div class="mt">${title}${badges || ''}</div>
-    ${sub ? `<div class="msub">${sub}</div>` : ''}</div>`;
-}
+const head = (crumb, title, badges, sub) => `<div class="mh">
+  <div class="crumb">${crumb}</div>
+  <div class="mt">${title}${badges || ''}</div>
+  ${sub ? `<div class="msub">${sub}</div>` : ''}</div>`;
 
 async function paintCenter() {
   const s = sel();
@@ -128,7 +126,7 @@ async function paintCenter() {
     if (s.kind === 'canon')   return viewCanon(s.pid);
     if (s.kind === 'source')  return await viewSource(s.pid);
     if (s.kind === 'acts')    return viewActs();
-    return await viewAuthor(s.pid || 'AUT-GALDURDAL');
+    return await viewAuthor(s.pid);
   } catch (e) {
     console.error(e);
     A.els.main.innerHTML = head('Library', 'Klarte ikke å hente', '', esc(e.message));
@@ -136,206 +134,202 @@ async function paintCenter() {
   }
 }
 
-/* ---- forfatter ---- */
+/* ---- forfatter: greenfield ---- */
 async function viewAuthor(pid) {
+  if (!D.authors.length || pid === 'none') {
+    A.els.main.innerHTML = head('Forfattere', 'Ingen forfatter komponert', '',
+      'Kildene er minet. Stemmen som skal skrives mot finnes ikke ennå.') + `
+      <div class="mb">
+        <div class="sec"><div class="sech cond">Tilgjengelige kilder</div>
+          <div class="rowlist">${D.sources.map(s => `
+            <div class="row" data-pick="source" data-pid="${s.public_id}">
+              <span class="nm">${esc(s.name)}</span>
+              <span class="src">${s.aspects.filter(a => a.status === 'mined').length} av ${s.aspects.length} aspekter</span>
+            </div>`).join('')}</div>
+        </div>
+        <div class="sec"><div class="sech cond">Hva som mangler</div>
+          <div class="empty">En forfatter er en komposisjon av kilder til regler med betingelse —
+            <span class="mono">alltid</span> · <span class="mono">når</span> · <span class="mono">aldri</span>.<br>
+            Komposisjonen gjøres gjennom dialog i Author, ikke som skjema her.
+            <br><button class="btn go" data-open-author>Komponer i Author</button></div>
+        </div>
+      </div>`;
+    A.els.ctx.innerHTML = `
+      <div class="blk"><div class="bl cond">Substrat</div>
+        <div class="kr"><span class="kk">lorecore_author_profiles</span><span class="kv ok">${D.sources.length}</span></div>
+        <div class="kr"><span class="kk">lore_authors</span><span class="kv bad">finnes ikke</span></div>
+        <div class="kr"><span class="kk">lore_author_rules</span><span class="kv bad">finnes ikke</span></div>
+        <div class="hint">Kilde-laget er ferdig minet. Forfatter-laget er ikke bygget.</div></div>`;
+    return;
+  }
   const a = await store.author(pid);
-  const ovr = await store.overrides(pid);
-
-  A.els.main.innerHTML = head('Forfattere', esc(a.name), '',
-    `Komponert av ${a.sources.length} kilder · brukt av ${a.used_by_books} bok`) + `
-    <div class="mb">
-      <div class="sec"><div class="sech cond">Bygget på</div>
-        <div class="rowlist">${a.sources.map(s => `
-          <div class="row" data-pick="source" data-pid="${s.public_id}">
-            <span class="nm">${esc(s.name)}</span><span class="src">${s.aspects.join(' · ')}</span></div>`).join('')}
-        </div>
-      </div>
-
-      <div class="sec"><div class="sech cond"><span>Regler</span><span class="src">${a.active_rules} aktive</span></div>
-        <div class="voicebox">${a.rules.map(r => `
-          <div class="vrule">
-            <span class="rulekey">${r.rule_key}</span>
-            <span class="cond-tag ${r.condition}">${({ always: 'alltid', when: 'når', never: 'aldri' })[r.condition]}</span>
-            <span>${esc(r.rule_text)}${r.reads_from_canon
-              ? ` <span class="src">leser ${r.reads_from_canon} — bor her</span>` : ''}</span>
-          </div>`).join('')}
-        </div>
-      </div>
-
-      ${ovr.length ? `
-      <div class="sec"><div class="sech cond">Overstyres i</div>
-        <div class="rowlist">${ovr.map(o => `
-          <div class="row" data-pick="chapter" data-pid="${o.target_pid}">
-            <span class="num mono">${o.target_number}</span>
-            <span class="nm">${esc(o.target_label)}</span>
-            <span class="src" style="color:var(--vi)">${esc(o.summary)}</span></div>`).join('')}
-        </div>
-      </div>` : ''}
-    </div>`;
-
-  A.els.ctx.innerHTML = `
-    <div class="blk"><div class="bl cond">Endre stemmen</div>
-      <div class="hint">Forfattere lages og endres i Author gjennom dialog. Denne flaten viser hva som gjelder nå.</div>
-      <button class="btn act" data-open-author style="margin-top:8px">Åpne i Author</button></div>
-    <div class="blk"><div class="bl cond">Brukt av</div>
-      <div class="kr"><span class="kk">Galdurdal Book 1</span><span class="kv">${data.overview.book_groups[0].versions.length} versjoner</span></div>
-      <div class="kr"><span class="kk">Kapitler med overstyring</span><span class="kv ovr">${ovr.length}</span></div></div>
-    <div class="blk"><div class="bl cond">Etterlevelse</div>
-      ${a.compliance.map(c => `
-        <div class="kr"><span class="kk">${esc(c.label)}</span><span class="kv ${c.state}">${esc(c.value)}</span></div>`).join('')}
-      <button class="btn act" data-open-qc style="margin-top:8px">Se alle funn</button></div>`;
+  A.els.main.innerHTML = head('Forfattere', esc(a.name), '', esc(a.description || '')) +
+    `<div class="mb"><div class="empty">Regelvisning kommer når lore_author_rules finnes.</div></div>`;
+  A.els.ctx.innerHTML = '';
 }
 
-/* ---- kapittel ---- */
+/* ---- kapittel: scene-plan mot prosa ---- */
 async function viewChapter(pid) {
   const c = await store.chapter(pid);
-  const ovr = c.voice?.override;
+  const b = c.brief;
   const badges = [
-    ovr ? '<span class="badge ovr">egen stemme</span>' : '',
-    c.brief_missing ? '<span class="badge warn">mangler brief</span>' : '',
+    !b ? '<span class="badge warn">mangler brief</span>' : '',
+    !c.has_prose ? '<span class="badge warn">ingen prosa</span>' : '',
   ].join('');
-
-  const scene = c.scenes[0];
 
   A.els.main.innerHTML = head(
     `Galdurdal Book 1 / ${A.state.versionLabel}`,
     `Kapittel ${c.order_index} — ${esc(c.title)}`, badges,
-    `POV ${esc(c.pov || '—')} · ${c.scene_count || c.scenes.length} scener · ${fmtNum(c.word_count)} ord`) + `
+    `POV ${esc(c.pov || '—')}${b ? ` · akt ${b.act} · ${esc(b.timeline_marker || '')}` : ''} · ${fmtNum(c.word_count)} ord`) + `
     <div class="mb">
-      ${ovr ? `
-      <div class="sec">
-        <div class="sech cond"><span>Stemme-overstyring</span>
-          <span class="src">satt ${new Date(ovr.set_at).toLocaleDateString('no-NO')} · arver Galdurdal-stemmen</span></div>
-        <div class="voicebox">
-          <div class="vhead"><span class="vname">Avvik fra forfatteren</span>
-            <button class="btn" data-remove-override="${ovr.public_id}">Fjern overstyring</button></div>
-          <div style="padding:11px 13px">
-            ${ovr.rule_deltas.map(d => `
-              <div class="diffline">
-                <span>${ruleName(d.rule_key)} <span class="mono" style="color:var(--tx3)">${d.rule_key}</span></span>
-                <span class="dn">${d.direction === 'up' ? 'opp' : 'ned'} — ${esc(d.note)}</span></div>`).join('')}
-            <div class="diffline"><span>Alle øvrige regler</span><span style="color:var(--tx3)">arvet uendret</span></div>
-            <div class="hint" style="margin-top:10px">Grunn: ${esc(ovr.reason)}</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;margin-top:9px">
-          <button class="btn go" data-run="chapters" data-scope="${c.public_id}">Skriv kapittelet på nytt</button>
-          <button class="btn" data-open-author>Juster i Author</button>
-        </div>
-      </div>` : ''}
-
-      <div class="sec">
-        <div class="sech cond">${scene ? `Scene ${scene.order_index} — brief og prosa` : 'Brief og prosa'}</div>
+      <div class="sec"><div class="sech cond"><span>Kontrakt og prosa</span>
+        ${b ? `<span class="src">${b.scene_count} scener planlagt · form: ${esc(b.shape || '—')}</span>` : ''}</div>
         <div class="split">
-          <div class="pane"><div class="ptitle cond">Brief</div>
-            ${c.brief_missing || !scene?.key_beats?.length ? `
-              <div class="empty">Ingen brief lagret for dette kapittelet.<br>
-                Prosaen finnes, men kontrakten den skulle skrives mot mangler.
-                <br><button class="btn go" data-run="briefs" data-scope="${c.public_id}">Kjør brief-modulen</button></div>` : `
-              <div class="beat"><b>POV</b> ${esc(scene.pov)} · ${esc(scene.location || '')}</div>
-              ${scene.key_beats.map((b, i) => `<div class="beat"><b>Beat ${i + 1}</b> ${esc(b)}</div>`).join('')}`}
+          <div class="pane"><div class="ptitle cond">Scene-plan</div>
+            ${!b ? `<div class="empty">Ingen brief for kapittel ${c.order_index}.<br>
+              Prosaen finnes, men kontrakten den skulle skrives mot mangler.
+              <button class="btn go" data-run="briefs">Kjør brief-modulen</button></div>`
+              : (b.scenes || []).map(s => `
+                <div class="beat"><b>Scene ${s.slot}</b>${s.target_words ? ` · ${s.target_words} ord` : ''}
+                  <div style="margin-top:4px">${esc(s.purpose || '')}</div>
+                  ${s.sensory_anchor ? `<div class="src" style="margin-top:4px">${esc(s.sensory_anchor)}</div>` : ''}
+                </div>`).join('')}
           </div>
           <div class="pane"><div class="ptitle cond">Prosa</div>
-            ${scene?.content
-              ? `<div class="prose">${esc(scene.content)}</div>`
-              : `<div class="empty">Ingen prosa lagret.<button class="btn go" data-run="chapters" data-scope="${c.public_id}">Kjør kapittel-modulen</button></div>`}
+            ${c.has_prose ? `<div class="prose">${esc(c.prose_excerpt)}…</div>`
+              : `<div class="empty">Ingen prosa lagret.
+                 <button class="btn go" data-run="chapters">Kjør kapittel-modulen</button></div>`}
           </div>
         </div>
       </div>
+
+      ${b && b.constraints?.length ? `
+      <div class="sec"><div class="sech cond"><span>Absolutte begrensninger</span>
+        <span class="src">aktive i dette kapittelet</span></div>
+        <div class="voicebox">${b.constraints.map(k => `
+          <div class="vrule"><span class="cond-tag never">aldri</span>
+            <span class="mono">${esc(k)}</span></div>`).join('')}
+        </div>
+        <div class="hint">Dette er never-reglene i maskinlesbar form. QC måler mot dem.</div>
+      </div>` : ''}
+
+      ${b && (b.callbacks_to_plant?.length || b.callbacks_to_pay_off?.length) ? `
+      <div class="sec"><div class="sech cond">Callbacks</div>
+        <div class="rowlist">
+          ${(b.callbacks_to_plant || []).map(x => `
+            <div class="row"><span class="nm">${esc(x)}</span><span class="src">plantes</span></div>`).join('')}
+          ${(b.callbacks_to_pay_off || []).map(x => `
+            <div class="row"><span class="nm">${esc(x)}</span><span class="src" style="color:var(--gr)">innfris</span></div>`).join('')}
+        </div>
+      </div>` : ''}
     </div>`;
 
-  const fnd = (await store.findings(A.state.bookPid))
-    .filter(f => f.scope_label?.includes(`kap ${c.order_index}`));
-
   A.els.ctx.innerHTML = `
-    ${c.brief_missing ? `
-      <div class="blk"><div class="bl cond">Hva mangler</div>
-        <div class="find"><div class="ft"><span>Brief ikke lagret</span><span class="sev blk">blokker</span></div>
-          <div class="fd">${esc(c.brief_missing_note || '')}</div></div>
-        <button class="btn go act" data-run="briefs" data-scope="${c.public_id}">Kjør brief-modulen</button></div>` : ''}
-    ${fnd.length ? `
-      <div class="blk"><div class="bl cond">Funn i dette kapittelet</div>
-        ${fnd.map(f => `
-          <div class="find" data-open-finding="${f.public_id}">
-            <div class="ft"><span>${esc(f.title)}</span><span class="sev ${sevClass(f.severity)}">${sevLabel(f.severity)}</span></div>
-            <div class="fd">${f.summary}</div></div>`).join('')}
-      </div>` : ''}
+    ${b?.orphaned ? `
+    <div class="blk"><div class="bl cond">Substrat-avvik</div>
+      <div class="find"><div class="ft"><span>Brief er foreldreløs</span><span class="sev maj">større</span></div>
+        <div class="fd">Raden har <span class="mono">book_public_id = NULL</span> og henger kun på biblioteket.
+          Den joines på <span class="mono">chapter_n</span>, ikke på kapittelraden.</div></div></div>` : ''}
     <div class="blk"><div class="bl cond">Opphav</div>
-      <div class="kr"><span class="kk">Run</span><span class="kv">${c.pipeline_run_id || 'ingen'}</span></div>
-      ${c.written_by?.length ? `<div class="kr"><span class="kk">Skrevet av</span><span class="kv">${c.written_by.join(' · ')} → ${c.synthesized_by}</span></div>` : ''}
-      <div class="kr"><span class="kk">Stemme</span><span class="kv ${ovr ? 'ovr' : ''}">${ovr ? 'overstyrt' : 'arvet'}</span></div>
-      <div class="kr"><span class="kk">Kanon-sjekk</span><span class="kv ${c.canon_check === 'passed' ? 'ok' : 'bad'}">${
-        c.canon_check === 'passed' ? 'bestått' : 'kan ikke vurderes'}</span></div></div>`;
+      <div class="kr"><span class="kk">Run</span><span class="kv">${esc(c.pipeline_run_id || 'ingen')}</span></div>
+      <div class="kr"><span class="kk">Status</span><span class="kv">${esc(c.status || '—')}</span></div>
+      <div class="kr"><span class="kk">Verdikt</span><span class="kv ${
+        c.verdict_score == null ? '' : (c.verdict_score < 80 ? 'bad' : 'ok')}">${
+        c.verdict_score == null ? '—' : c.verdict_score}</span></div>
+      <div class="kr"><span class="kk">Stemme</span><span class="kv">arvet</span></div></div>
+    <div class="blk"><div class="bl cond">Kjør på dette kapittelet</div>
+      <button class="btn go act" data-run="chapters">Skriv om kapittelet</button>
+      <button class="btn act" data-open-qc>Se funn i QC</button></div>`;
 }
 
 /* ---- kanon ---- */
 function viewCanon(which) {
-  const k = data.canon;
-  A.els.main.innerHTML = head(`Kanon / ${k.universe_id}`, 'Verden og karakterer', '',
-    'Deles av alle bøker og versjoner i universet') + `
-    <div class="mb">
-      <div class="sec"><div class="sech cond">Verdener</div>
-        <div class="rowlist">${k.worlds.map(w => `
+  const k = D.canon;
+  if (which === 'characters') {
+    A.els.main.innerHTML = head(`Kanon / ${D.overview.library.universe_id}`, 'Karakterer', '',
+      `${k.characters.length} karakterer · deles av alle versjoner`) + `
+      <div class="mb">${k.characters.map(c => `
+        <div class="sec"><div class="sech cond"><span>${esc(c.name)}</span>
+          <span class="src">${esc(c.role || '')}${c.is_pre_planned ? ' · forhåndsplanlagt' : ''}</span></div>
+          <div class="voicebox"><div class="vrule"><span>${esc((c.traits || '').slice(0, 480))}…</span></div></div>
+        </div>`).join('')}</div>`;
+    A.els.ctx.innerHTML = `
+      <div class="blk"><div class="bl cond">R7 trenger et flagg</div>
+        <div class="hint">Regelen «aldri primitivt lag i kald POV» krever et maskinlesbart
+          <span class="mono">cold</span>-flagg. I dag er <span class="mono">traits</span> lang prosa.
+          Enten egen kolonne, eller avledet ved mining.</div></div>`;
+    return;
+  }
+  if (which === 'locations') {
+    A.els.main.innerHTML = head(`Kanon / ${D.overview.library.universe_id}`, 'Lokasjoner', '',
+      `${k.locations.length} fra research-substratet`) + `
+      <div class="mb"><div class="rowlist">${k.locations.map(l => `
+        <div class="row"><span class="nm">${esc(l.name)}</span>
+          <span class="src">${esc(l.location_type || '')}${l.region ? ' · ' + esc(l.region) : ''}</span></div>`).join('')}
+      </div></div>`;
+    A.els.ctx.innerHTML = `<div class="blk"><div class="bl cond">Kilde</div>
+      <div class="hint">Disse kommer fra <span class="mono">lore_library_locations</span> — research, ikke fiksjon.</div></div>`;
+    return;
+  }
+  const tiers = {};
+  k.worlds.forEach(w => (tiers[w.depth_tier || 'standard'] ||= []).push(w));
+  A.els.main.innerHTML = head(`Kanon / ${D.overview.library.universe_id}`, 'Verdener', '',
+    `${k.worlds.length} i fire dybdenivåer`) + `
+    <div class="mb">${Object.entries(tiers).map(([t, ws]) => `
+      <div class="sec"><div class="sech cond"><span>${t}</span><span class="src">${ws.length}</span></div>
+        <div class="rowlist">${ws.slice(0, 12).map(w => `
           <div class="row"><span class="nm">${esc(w.name)}</span>
-            <span class="src">${esc(w.kind)}${w.note ? ' · ' + esc(w.note) : ''}</span></div>`).join('')}
-        </div></div>
-      <div class="sec"><div class="sech cond">Karakterer</div>
-        <div class="rowlist">${k.characters.map(c => `
-          <div class="row"><span class="nm">${esc(c.name)}</span>
-            <span class="src ${c.cold ? 'mono' : ''}">${esc(c.note || '—')}</span></div>`).join('')}
-        </div></div>
-    </div>`;
-
+            <span class="src">${esc((w.summary || '').slice(0, 70))}…</span></div>`).join('')}
+          ${ws.length > 12 ? `<div class="row"><span class="nm" style="color:var(--tx3)">+ ${ws.length - 12} til</span></div>` : ''}
+        </div></div>`).join('')}</div>`;
   A.els.ctx.innerHTML = `
     <div class="blk"><div class="bl cond">Scope</div>
-      <div class="hint">Kanon er per univers. Bytter du versjon på boka, endres ikke dette.</div></div>
-    <div class="blk"><div class="bl cond">Leses av</div>
-      ${k.read_by.map(r => `<div class="kr"><span class="kk">${esc(r.label)}</span>
-        <span class="kv ${r.state}">${esc(r.value)}</span></div>`).join('')}</div>`;
+      <div class="hint">Kanon er per bibliotek. Bytter du versjon på boka, endres ikke dette.</div></div>
+    <div class="blk"><div class="bl cond">Dybdenivå</div>
+      ${Object.entries(tiers).map(([t, ws]) => `
+        <div class="kr"><span class="kk">${t}</span><span class="kv">${ws.length}</span></div>`).join('')}
+      <div class="hint"><span class="mono">hidden_canon</span> er lag som aldri skal bli eksplisitt i teksten.</div></div>`;
 }
 
-/* ---- kilde sett fra Library ---- */
+/* ---- kilde ---- */
 async function viewSource(pid) {
   const s = await store.source(pid);
   const mined = s.aspects.filter(a => a.status === 'mined');
   A.els.main.innerHTML = head('Kilder', esc(s.name), '',
-    `${s.works.length} bøker minte · brukt i ${s.used_in.length} forfatter`) + `
+    `${s.works.length} verk · ${mined.length} av ${s.aspects.length} aspekter minet · ${fmtNum(s.observation_count)} observasjoner`) + `
     <div class="mb">
       <div class="sec"><div class="sech cond">Uttrukne trekk</div>
-        <div class="voicebox">${mined.map((a, i) => `
-          <div class="vrule"><span class="rulekey">${String(i + 1).padStart(2, '0')}</span>
-            <span>${renderSummary(a.summary)}</span></div>`).join('')}
+        <div class="voicebox">${mined.map(a => `
+          <div class="vrule"><span class="rulekey">${a.short.slice(0, 4)}</span>
+            <span><b style="color:var(--tx)">${esc(a.label)}</b> — ${esc(a.summary)}</span></div>`).join('')}
         </div></div>
-      <div class="sec"><div class="sech cond">Brukt i</div>
-        <div class="rowlist">${s.used_in.map(u => `
-          <div class="row" data-pick="author" data-pid="${u.public_id}">
-            <span class="nm">${esc(u.name)}</span><span class="src">ryggrad</span></div>`).join('')}
-        </div></div>
+      ${s.metrics_summary?.key_numbers ? `
+      <div class="sec"><div class="sech cond">Målte tall</div>
+        <div class="voicebox"><div class="vrule"><span>${esc(s.metrics_summary.key_numbers)}</span></div></div>
+      </div>` : ''}
     </div>`;
-
   A.els.ctx.innerHTML = `
     <div class="blk"><div class="bl cond">Kilde</div>
-      <div class="kr"><span class="kk">Bøker minte</span><span class="kv">${s.works.length}</span></div>
-      <div class="kr"><span class="kk">Aspekter</span><span class="kv">${mined.length} av ${s.aspects.length}</span></div>
+      <div class="kr"><span class="kk">Verk</span><span class="kv">${s.works.length}</span></div>
+      <div class="kr"><span class="kk">Ord totalt</span><span class="kv">${fmtNum(s.works.reduce((n, w) => n + (w.word_count || 0), 0))}</span></div>
+      <div class="kr"><span class="kk">Observasjoner</span><span class="kv">${fmtNum(s.observation_count)}</span></div>
       <div class="kr"><span class="kk">Scope</span><span class="kv">globalt</span></div>
-      <div class="hint">Kilder går på tvers av univers. Samme kilde kan brukes i flere forfattere.</div></div>
+      <div class="hint">Kildetekst lagres ikke som prosa — kun uttrukne mønstre og målinger.</div></div>
     <button class="btn act" data-open-kilder>Åpne i Kilder</button>`;
 }
 
+/* ---- akter ---- */
 function viewActs() {
-  A.els.main.innerHTML = head(`Galdurdal Book 1 / ${A.state.versionLabel}`, 'Akter', '', '4 akter · 25 kapitler') + `
-    <div class="mb"><div class="empty">Akt-visningen henter fra <span class="mono">lore_acts</span>.
-      Endepunktet finnes ikke ennå — står som punkt 5 i byggerekkefølgen.</div></div>`;
-  A.els.ctx.innerHTML = '';
+  A.els.main.innerHTML = head(`Galdurdal Book 1 / ${A.state.versionLabel}`, 'Akter', '',
+    `${D.canon.acts.length} akter`) + `
+    <div class="mb">${D.canon.acts.map(a => `
+      <div class="sec"><div class="sech cond"><span>Akt ${a.order_index} — ${esc(a.title || '')}</span>
+        <span class="src">${esc(a.status || '')}</span></div>
+        <div class="voicebox"><div class="vrule"><span>${esc((a.summary || a.act_summary || '').slice(0, 700))}…</span></div></div>
+      </div>`).join('')}</div>`;
+  A.els.ctx.innerHTML = `<div class="blk"><div class="bl cond">Scope</div>
+    <div class="hint">Akter ligger på biblioteket, ikke per versjon.</div></div>`;
 }
-
-/* ─────────── hjelpere ─────────── */
-
-const RULE_NAMES = { R1: 'Cornwell-ryggrad', R2: 'Rothfuss-interioritet', R3: 'Wilde-legendeløft', R7: 'Primitivt lag', R9: 'Ordmonopol' };
-const ruleName = k => RULE_NAMES[k] || k;
-const sevClass = s => ({ blocker: 'blk', major: 'maj', minor: 'min' }[s] || 'min');
-const sevLabel = s => ({ blocker: 'blokker', major: 'større', minor: 'mindre' }[s] || s);
-const renderSummary = t => esc(t).replace(/\{([^}]+)\}/g, '<span class="mono" style="color:var(--tx)">$1</span>');
 
 /* ─────────── hendelser ─────────── */
 
@@ -343,46 +337,35 @@ function wire() {
   if (wired) return;
   wired = true;
 
-  onClick(A.els.rail, '[data-pick]', async el => {
+  const pick = async el => {
     A.state.sel.library = { kind: el.dataset.pick, pid: el.dataset.pid };
     paintRail(); await paintCenter();
-  });
+  };
+  onClick(A.els.rail, '[data-pick]', pick);
+  onClick(A.els.main, '[data-pick]', pick);
+
   onClick(A.els.rail, '[data-expand-chapters]', () => { expanded = true; paintRail(); });
-  onClick(A.els.rail, '[data-new-author]', () =>
-    toast('Forfattere lages gjennom dialog i Author, ikke som skjema her.'));
 
   onClick(A.els.rail, '[data-version]', async el => {
     A.setBook(el.dataset.version, el.dataset.label);
-    data.chapters = await store.chapters(A.state.bookPid);
+    D.chapters = await store.chapters(A.state.bookPid);
+    expanded = false;
+    if (sel().kind === 'chapter') A.state.sel.library = { kind: 'author', pid: 'none' };
     paintRail(); await paintCenter();
   });
 
-  onClick(A.els.main, '[data-pick]', async el => {
-    A.state.sel.library = { kind: el.dataset.pick, pid: el.dataset.pid };
-    paintRail(); await paintCenter();
-  });
-
-  const runHandler = async el => {
-    const r = await store.startRun({
-      module_key: el.dataset.run, scope_kind: 'chapter', scope_pid: el.dataset.scope });
+  const run = async el => {
+    const c = sel().kind === 'chapter' ? sel().pid : null;
+    const r = await store.startRun({ stage: el.dataset.run, book_public_id: A.state.bookPid,
+      scope_kind: c ? 'chapter' : 'book', scope_pid: c || A.state.bookPid });
     toast(`Startet ${el.dataset.run} · ${r.public_id}`, 'ok');
     A.refreshRuns();
   };
-  onClick(A.els.main, '[data-run]', runHandler);
-  onClick(A.els.ctx, '[data-run]', runHandler);
+  onClick(A.els.main, '[data-run]', run);
+  onClick(A.els.ctx, '[data-run]', run);
 
-  onClick(A.els.main, '[data-remove-override]', async el => {
-    const ok = await confirmModal('Fjern overstyring',
-      'Kapittelet faller tilbake til forfatterens regler. Overstyringsraden slettes, og grunnen med den.', 'Fjern');
-    if (!ok) return;
-    await store.removeOverride(el.dataset.removeOverride);
-    toast('Overstyring fjernet', 'ok');
-    await paintCenter();
-  });
-
-  onClick(A.els.ctx, '[data-open-author]', () => A.go('author'));
   onClick(A.els.main, '[data-open-author]', () => A.go('author'));
+  onClick(A.els.ctx, '[data-open-author]', () => A.go('author'));
   onClick(A.els.ctx, '[data-open-qc]', () => A.go('qc'));
   onClick(A.els.ctx, '[data-open-kilder]', () => A.go('kilder', { pid: sel().pid }));
-  onClick(A.els.ctx, '[data-open-finding]', el => A.go('qc', { pid: el.dataset.openFinding }));
 }
