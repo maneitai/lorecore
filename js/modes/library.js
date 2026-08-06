@@ -187,12 +187,8 @@ async function viewChapter(pid) {
   const b = c.brief;
   const badges = [
     !b ? '<span class="badge warn">mangler brief</span>' : '',
-    !c.has_prose && !c.content ? '<span class="badge warn">ingen prosa</span>' : '',
+    !c.has_prose ? '<span class="badge warn">ingen prosa</span>' : '',
   ].join('');
-
-  /* Bruk content (full prosa fra enkelt-kall) eller prose_excerpt (fra liste). */
-  const prose = c.content || c.prose_excerpt || '';
-  const hasProse = c.has_prose || (c.content && c.content.trim().length > 0);
 
   A.els.main.innerHTML = head(
     `Galdurdal Book 1 / ${A.state.versionLabel}`,
@@ -213,13 +209,8 @@ async function viewChapter(pid) {
                 </div>`).join('')}
           </div>
           <div class="pane"><div class="ptitle cond">Prosa</div>
-            ${hasProse
-              ? expandRow({
-                  name: `${fmtNum(c.word_count)} ord i basen`,
-                  meta: 'klikk for å lese',
-                  body: prose,
-                  label: 'Hele kapittelet',
-                })
+            ${c.has_prose ? `<div class="prose">${esc(c.prose_excerpt)}<span class="excerpt-end">Utdrag — ${
+                 fmtNum(c.word_count)} ord i basen. Hele teksten krever GET /chapters/{pid}.</span></div>`
               : `<div class="empty">Ingen prosa lagret.
                  <button class="btn go" data-run="chapters">Kjør kapittel-modulen</button></div>`}
           </div>
