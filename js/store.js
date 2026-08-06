@@ -17,9 +17,6 @@ export const SOURCE = new URLSearchParams(location.search).get('live') ? 'live' 
 const clone = v => structuredClone(v);
 const wait  = (v, ms = 60) => new Promise(r => setTimeout(() => r(clone(v)), ms));
 
-/* Live API returnerer ofte {items: [...]} — frontend forventer ren array. */
-const unwrap = r => Array.isArray(r) ? r : (r?.items ?? r);
-
 const local = {
   findings: clone(F.findings),
   sources: clone(F.sources),
@@ -47,42 +44,7 @@ export const store = {
   /* [finnes] GET /api/lorecore/overview?library_public_id=&book_public_id=
      Må endres: returner tellinger + bokgruppe, ikke alle rader. */
   async overview() {
-    if (SOURCE === 'live') {
-      const r = await api(`/api/lorecore/overview?library_public_id=${F.library.public_id}`);
-      /* Live API returnerer gammelt format — transformer til det frontend forventer. */
-      const lib = r.selected_library || r.libraries?.[0] || {};
-      const books = r.books || [];
-      const selectedBook = r.selected_book || books[0] || null;
-      /* Grupper bøker på book_group_id. */
-      const groups = {};
-      for (const b of books) {
-        const gid = b.book_group_id || b.public_id;
-        if (!groups[gid]) groups[gid] = { book_group_id: gid, title: b.title, versions: [] };
-        groups[gid].versions.push(b);
-      }
-      const bookGroup = selectedBook
-        ? groups[selectedBook.book_group_id || selectedBook.public_id]
-        : Object.values(groups)[0] || { versions: [] };
-      return {
-        library: lib,
-        book_group: bookGroup,
-        canon: {
-          worlds: (r.worlds || []).length,
-          characters: (r.characters || []).length,
-          locations: 0,
-          acts: 0,
-        },
-        counts: {
-          sources: 0,
-          authors: 0,
-          briefs: 0,
-          open_findings: 0,
-        },
-        meta: F.meta,
-        /* Behold raw-data for Library som trenger det. */
-        _raw: r,
-      };
-    }
+    if (SOURCE === 'live') return api(`/api/lorecore/overview?library_public_id=${F.library.public_id}`);
     return wait({
       library: F.library,
       book_group: F.bookGroup,
@@ -105,7 +67,7 @@ export const store = {
   /* [finnes] GET /api/lorecore/chapters?book_public_id=
      Må utvides med flags[] + pov + has_brief. */
   async chapters(bookPid) {
-    if (SOURCE === 'live') return unwrap(await api(`/api/lorecore/chapters?book_public_id=${bookPid}`));
+    if (SOURCE === 'live') return api(`/api/lorecore/chapters?book_public_id=${bookPid}`);
     return wait(F.chaptersByBook[bookPid] || []);
   },
 
@@ -121,7 +83,7 @@ export const store = {
   /* MANGLER: GET /api/lorecore/briefs?library_public_id=
      32 rader, alle med book_public_id NULL — foreldrelose. */
   async briefs() {
-    if (SOURCE === 'live') return unwrap(await api(`/api/lorecore/briefs?library_public_id=${F.library.public_id}`));
+    if (SOURCE === 'live') return api(`/api/lorecore/briefs?library_public_id=${F.library.public_id}`);
     return wait(F.briefsByChapterN);
   },
 
@@ -135,7 +97,7 @@ export const store = {
      Leser lorecore_author_profiles + lorecore_corpus_references.
      Aspekt-nøklene ER nøklene i style_card_json. */
   async sources() {
-    if (SOURCE === 'live') return unwrap(await api('/api/lorecore/sources'));
+    if (SOURCE === 'live') return api('/api/lorecore/sources');
     return wait(local.sources);
   },
   async source(pid) {
@@ -158,7 +120,7 @@ export const store = {
   /* MANGLER HELT: lore_authors + lore_author_rules + lore_voice_overrides.
      style_card_json er kilde-nivå (funn per forfatter), ikke komponert stemme. */
   async authors() {
-    if (SOURCE === 'live') return unwrap(await api('/api/lorecore/authors'));
+    if (SOURCE === 'live') return api('/api/lorecore/authors');
     return wait(local.authors);
   },
   async author(pid) {
@@ -168,14 +130,14 @@ export const store = {
     return wait(a);
   },
   async overrides(authorPid) {
-    if (SOURCE === 'live') return unwrap(await api(`/api/lorecore/voice-overrides?author_public_id=${authorPid}`));
+    if (SOURCE === 'live') return api(`/api/lorecore/voice-overrides?author_public_id=${authorPid}`);
     return wait(local.overrides.filter(o => o.author_public_id === authorPid));
   },
 
   /* MANGLER: GET /api/lorecore/findings?book_public_id=&status=
      Tabellen lore_audit_findings finnes med ekte skjema. */
   async findings(bookPid, status = 'open') {
-    if (SOURCE === 'live') return unwrap(await api(`/api/lorecore/findings?book_public_id=${bookPid}&status=${status}`));
+    if (SOURCE === 'live') return api(`/api/lorecore/findings?book_public_id=${bookPid}&status=${status}`);
     return wait(local.findings.filter(f =>
       (!bookPid || f.book_public_id === bookPid) && (status === 'all' || f.status === status)));
   },
@@ -196,8 +158,8 @@ export const store = {
       book_public_id: bookPid,
       chapters: chs.length,
       without_brief: chs.filter(c => !c.has_brief).length,
-      without_prose: chs.filter(c => c.flags?.some(f => f.kind === 'no_prose')).length,
-      flagged: chs.filter(c => c.flags?.some(f => f.kind === 'low_verdict')).length,
+      without_prose: chs.filter(c => c.flags.some(f => f.kind === 'no_prose')).length,
+      flagged: chs.filter(c => c.flags.some(f => f.kind === 'low_verdict')).length,
       critical: fnd.filter(f => f.severity === 'critical').length,
       open_findings: fnd.length,
       briefs_orphaned: Object.values(briefs).filter(b => b.orphaned).length,
@@ -207,7 +169,7 @@ export const store = {
 
   /* [finnes] GET /api/chat-sessions?surface=lorecore */
   async sessions() {
-    if (SOURCE === 'live') return unwrap(await api('/api/chat-sessions?surface=lorecore&limit=30'));
+    if (SOURCE === 'live') return api('/api/chat-sessions?surface=lorecore&limit=30');
     return wait([]);
   },
   async sessionMessages(pid) {
@@ -239,7 +201,7 @@ export const store = {
 
   /* [finnes] GET /api/pipelines/runs/active */
   async activeRuns() {
-    if (SOURCE === 'live') return unwrap(await api('/api/pipelines/runs/active'));
+    if (SOURCE === 'live') return api('/api/pipelines/runs/active');
     return wait([]);
   },
 
